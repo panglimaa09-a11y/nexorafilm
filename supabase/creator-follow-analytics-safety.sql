@@ -83,8 +83,10 @@ security definer
 set search_path = public, pg_temp
 as $$
 begin
-  if new.status = 'published' and new.scan_status is distinct from 'safe' then
-    raise exception 'Video must pass automated safety scan before publication' using errcode = '23514';
+  if new.status = 'published'
+     and new.scan_status is distinct from 'safe'
+     and coalesce(new.moderation_note, '') not like 'Disetujui secara manual oleh admin.%' then
+    raise exception 'Video must pass automated safety scan or have an explicit admin moderation approval' using errcode = '23514';
   end if;
   return new;
 end;
