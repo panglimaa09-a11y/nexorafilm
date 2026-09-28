@@ -3,6 +3,16 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
+type PakasirWebhook = {
+  txn_id?: unknown;
+  order_id?: unknown;
+  amount?: unknown;
+  project?: unknown;
+  is_sandbox?: unknown;
+  status?: unknown;
+  [key: string]: unknown;
+};
+
 export async function POST(request: Request) {
   const slug = process.env.PAKASIR_PROJECT_SLUG?.trim();
   const apiKey = process.env.PAKASIR_API_KEY?.trim();
@@ -11,22 +21,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'not configured' }, { status: 500 });
   }
 
-  let body: any;
+  let body: PakasirWebhook;
   try {
-    body = await request.json();
+    body = (await request.json()) as PakasirWebhook;
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 });
   }
 
   const orderId =
     typeof body?.order_id === 'string' ? body.order_id.trim() : '';
+  const txnId = typeof body?.txn_id === 'string' ? body.txn_id.trim() : '';
   const amount = Number(body?.amount);
+
+  // Pakasir v2 webhook payloads do not necessarily include a "project" field.
+  // Validate it when present, but do not require it.
+  const projectMismatch =
+    typeof body?.project === 'string' && body.project.trim() !== slug;
 
   if (
     !orderId ||
+    !txnId ||
     !Number.isSafeInteger(amount) ||
     amount <= 0 ||
-    body?.project !== slug
+    projectMismatch
   ) {
     return NextResponse.json({ error: 'invalid notification' }, { status: 400 });
   }
@@ -50,16 +67,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'amount mismatch' }, { status: 400 });
   }
 
-  // Pakasir v2 create-transaction response must have been saved at checkout.
+  // Compare the notification's transaction ID with the ID saved at checkout.
   const previousRaw =
     payment.raw_response && typeof payment.raw_response === 'object'
-      ? payment.raw_response as Record<string, any>
+      ? (payment.raw_response as Record<string, any>)
       : {};
   const createResponse = previousRaw.pakasir;
-  const txnId =
-    typeof createResponse?.txn_id === 'string' ? createResponse.txn_id.trim() : '';
+  const savedTxnId =
+    typeof createResponse?.txn_id === 'string'
+      ? createResponse.txn_id.trim()
+      : '';
 
-  if (!txnId) {
+  if (!savedTxnId) {
     console.error('Pakasir txn_id missing for order:', orderId);
     return NextResponse.json(
       { error: 'transaction ID unavailable; create a new transaction' },
@@ -67,11 +86,54 @@ export async function POST(request: Request) {
     );
   }
 
+  if (savedTxnId !== txnId) {
+    return NextResponse.json({ error: 'transaction ID mismatch' }, { status: 400 });
+  }
+
+  // Sandbox callbacks are acknowledged for testing, but can never mark a
+  // payment paid or activate a production subscription.
+  if (body.is_sandbox === true) {
+    const { error: saveError } = await db
+      .from('payments')
+      .update({
+        raw_response: {
+          ...previousRaw,
+          pakasir_webhook: body,
+          pakasir_sandbox_test: {
+            received: true,
+            status: typeof body.status === 'string' ? body.status : 'unknown',
+          },
+        },
+      })
+      .eq('id', payment.id);
+
+    if (saveError) {
+      console.error('Pakasir sandbox webhook save failed:', saveError.message);
+      return NextResponse.json({ error: 'sandbox webhook save failed' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      sandbox: true,
+      subscription_activated: false,
+    });
+  }
+
+  // Production callbacks must explicitly identify themselves as non-sandbox.
+  if (body.is_sandbox !== false) {
+    return NextResponse.json(
+      { error: 'missing or invalid sandbox flag; payment not activated' },
+      { status: 400 }
+    );
+  }
+
   let verified: any;
   try {
     const statusUrl =
       'https://app.pakasir.com/api/v2/transaction-status/' +
-      encodeURIComponent(slug) + '/' + encodeURIComponent(txnId);
+      encodeURIComponent(slug) +
+      '/' +
+      encodeURIComponent(txnId);
 
     const response = await fetch(statusUrl, {
       method: 'GET',
@@ -113,7 +175,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Do not allow sandbox transactions to activate production subscriptions.
   if (verified?.is_sandbox !== false) {
     return NextResponse.json(
       { error: 'only a verified non-sandbox transaction can activate a subscription' },
@@ -125,6 +186,7 @@ export async function POST(request: Request) {
     completed: 'paid',
     pending: 'pending',
     canceled: 'cancelled',
+    cancelled: 'cancelled',
   };
   const nextStatus = statusMap[String(verified?.status ?? '').toLowerCase()];
 
@@ -135,9 +197,8 @@ export async function POST(request: Request) {
     );
   }
 
-  // Preserve txn_id from the create-transaction response for later callbacks.
   // Never downgrade a payment already marked paid.
-  if (payment.status !== 'paid' || nextStatus === 'paid') {
+  if (payment.status !== 'paid') {
     const { error: updateError } = await db
       .from('payments')
       .update({
