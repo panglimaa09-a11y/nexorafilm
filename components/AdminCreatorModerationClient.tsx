@@ -38,6 +38,9 @@ export default function AdminCreatorModerationClient({
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [previewVideoId, setPreviewVideoId] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewBusy, setPreviewBusy] = useState("");
 
   async function moderate(
     entity: "channel" | "video",
@@ -65,6 +68,37 @@ export default function AdminCreatorModerationClient({
       setMessage(error instanceof Error ? error.message : "Terjadi kesalahan.");
     } finally {
       setBusy("");
+    }
+  }
+
+  async function previewVideo(id: string) {
+    if (previewVideoId === id && previewUrl) {
+      setPreviewVideoId("");
+      setPreviewUrl("");
+      return;
+    }
+
+    setPreviewBusy(id);
+    setMessage("");
+    setPreviewVideoId(id);
+    setPreviewUrl("");
+    try {
+      const response = await fetch("/api/admin/creator-video-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Video tidak dapat dibuka.");
+      if (typeof result.url !== "string" || !result.url) {
+        throw new Error("URL pratinjau video tidak tersedia.");
+      }
+      setPreviewUrl(result.url);
+    } catch (error) {
+      setPreviewVideoId("");
+      setMessage(error instanceof Error ? error.message : "Video tidak dapat dibuka.");
+    } finally {
+      setPreviewBusy("");
     }
   }
 
@@ -126,6 +160,10 @@ export default function AdminCreatorModerationClient({
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs">{channel.status}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <button className={buttonClass} disabled={!!previewBusy}
+                    onClick={() => void previewVideo(video.id)}>
+                    {previewBusy === video.id ? "Membuka video..." : previewVideoId === video.id && previewUrl ? "Tutup video" : "▶ Lihat / Putar video"}
+                  </button>
                   {channel.status !== "active" && (
                     <button className={buttonClass} disabled={!!busy}
                       onClick={() => {
@@ -145,6 +183,28 @@ export default function AdminCreatorModerationClient({
                     </button>
                   )}
                 </div>
+                {previewVideoId === video.id && previewUrl && (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-cyan-400/25 bg-black p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-cyan-200">Pratinjau privat untuk admin</p>
+                      <button type="button" className={buttonClass}
+                        onClick={() => { setPreviewVideoId(""); setPreviewUrl(""); }}>
+                        Tutup pemutar
+                      </button>
+                    </div>
+                    <video
+                      key={previewUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="mx-auto max-h-[75vh] w-full rounded-lg bg-black"
+                      src={previewUrl}
+                    >
+                      Browser ini tidak mendukung pemutar video.
+                    </video>
+                    <p className="mt-2 text-xs text-slate-400">Tautan sementara dan hanya diberikan setelah pemeriksaan hak akses admin.</p>
+                  </div>
+                )}
               </article>
             ))}
           </div>
@@ -173,6 +233,7 @@ export default function AdminCreatorModerationClient({
                     <h3 className="font-semibold">{video.title}</h3>
                     <p className="mt-2 whitespace-pre-wrap text-sm text-slate-400">{video.description || "Tanpa deskripsi."}</p>
                     <p className="mt-2 break-all text-xs text-slate-500">Video ID: {video.id}</p>
+                    <p className="mt-1 break-all text-xs text-slate-500">File: {video.storage_path}</p>
                     <p className="mt-1 break-all text-xs text-slate-500">Channel ID: {video.channel_id}</p>
                     <p className="mt-2 text-sm text-cyan-200">Safety scan: {video.scan_status || "pending"}{video.scan_provider ? " · " + video.scan_provider : ""}</p>
                     {video.moderation_note && (
