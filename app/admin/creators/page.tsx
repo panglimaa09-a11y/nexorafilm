@@ -30,7 +30,7 @@ export default async function AdminCreatorsPage() {
       .select("id,user_id,name,handle,description,status,created_at")
       .order("created_at", { ascending: false }),
     adminDb.from("creator_videos")
-      .select("id,channel_id,owner_id,title,description,storage_path,status,moderation_note,created_at")
+      .select("id,channel_id,owner_id,title,description,storage_path,status,moderation_note,scan_status,scan_provider,scanned_at,created_at")
       .order("created_at", { ascending: false }),
   ]);
 
