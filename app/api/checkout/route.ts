@@ -1,4 +1,4 @@
-﻿import { createClient } from '@/lib/supabase-server';
+import { createClient } from '@/lib/supabase-server';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
@@ -122,8 +122,12 @@ export async function POST(request: Request) {
       paymentLink = null;
     }
 
+    const txnId =
+      typeof payload?.txn_id === 'string' ? payload.txn_id.trim() : '';
+
     if (
       !response.ok ||
+      !txnId ||
       !paymentLink ||
       paymentLink.protocol !== 'https:' ||
       paymentLink.hostname !== 'app.pakasir.com'
