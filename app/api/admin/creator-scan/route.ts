@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
     const admin = createAdminClient();
     const { data: video, error } = await admin.from("creator_videos")
-      .select("id,title,description,storage_path,status")
+      .select("id,title,description,storage_path,status,video_type,channel_id")
       .eq("id", id).maybeSingle();
     if (error || !video) return NextResponse.json({ error: "Video tidak ditemukan." }, { status: 404 });
 
@@ -29,7 +29,21 @@ export async function POST(request: Request) {
       ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: video.id, title: video.title, description: video.description })
       : { decision: "unavailable" as const, provider: "storage", result: { signed_url_failed: true }, note: "File tidak dapat dibaca untuk dipindai." };
 
-    const status = scan.decision === "blocked" ? "rejected" : scan.decision === "safe" ? video.status : "review";
+    let status = scan.decision === "blocked" ? "rejected" : scan.decision === "safe" ? video.status : "review";
+    // On a rescan, auto-publish only a still-reviewing Short that Gemini marked safe,
+    // and only when its creator channel is active. Never undo an admin rejection.
+    if (
+      scan.decision === "safe" &&
+      scan.provider === "Google Gemini video moderation" &&
+      video.video_type === "short" &&
+      video.status === "review"
+    ) {
+      const { data: channel } = await admin.from("creator_channels")
+        .select("status")
+        .eq("id", video.channel_id)
+        .maybeSingle();
+      if (channel?.status === "active") status = "published";
+    }
     const { error: updateError } = await admin.from("creator_videos").update({
       scan_status: scan.decision,
       scan_provider: scan.provider,

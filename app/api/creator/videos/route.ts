@@ -92,7 +92,14 @@ export async function POST(req: Request) {
     const scan = signed?.signedUrl
       ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: data.id, title, description })
       : { decision: "unavailable" as const, provider: "storage", result: { signed_url_failed: true }, note: "Video ditahan karena file tidak dapat diperiksa." };
-    const nextStatus = scan.decision === "blocked" ? "rejected" : "review";
+    // Gemini-approved Shorts publish automatically. Anything uncertain or unavailable stays in review.
+    // Other moderation providers keep the existing manual-review flow.
+    const isGeminiSafe = scan.decision === "safe" && scan.provider === "Google Gemini video moderation";
+    const nextStatus = scan.decision === "blocked"
+      ? "rejected"
+      : isGeminiSafe
+        ? "published"
+        : "review";
     const { data: updated } = await adminDb.from("creator_videos").update({
       scan_status: scan.decision,
       scan_provider: scan.provider,
