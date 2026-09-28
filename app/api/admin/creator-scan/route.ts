@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     const { data: signed } = await admin.storage.from("creator-videos").createSignedUrl(video.storage_path, 600);
     const scan = signed?.signedUrl
-      ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: video.id, title: video.title, description: video.description })
+      ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: video.id, title: video.title, description: video.description, storagePath: video.storage_path })
       : { decision: "unavailable" as const, provider: "storage", result: { signed_url_failed: true }, note: "File tidak dapat dibaca untuk dipindai." };
 
     let status = scan.decision === "blocked" ? "rejected" : scan.decision === "safe" ? video.status : "review";
