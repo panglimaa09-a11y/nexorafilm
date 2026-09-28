@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase-admin";
+import { createClient } from "@/lib/supabase-server";
+import CreatorFollowButton from "@/components/CreatorFollowButton";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,7 @@ export default async function CreatorProfilePage({
 
   const { data: channel, error: channelError } = await admin
     .from("creator_channels")
-    .select("id,name,handle,description,status")
+    .select("id,user_id,name,handle,description,status")
     .eq("handle", handle)
     .eq("status", "active")
     .maybeSingle();
@@ -24,6 +26,15 @@ export default async function CreatorProfilePage({
     throw new Error("Gagal memuat profil kreator.");
   }
   if (!channel) notFound();
+
+  const db = await createClient();
+  const { data: { user } } = await db.auth.getUser();
+  const [{ count: followerCount }, { data: existingFollow }] = await Promise.all([
+    admin.from("creator_follows").select("*", { count: "exact", head: true }).eq("channel_id", channel.id),
+    user
+      ? admin.from("creator_follows").select("id").eq("channel_id", channel.id).eq("follower_id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const { data: rawVideos, error: videoError } = await admin
     .from("creator_videos")
@@ -60,6 +71,13 @@ export default async function CreatorProfilePage({
           <h1 className="mt-3 break-words text-3xl font-bold sm:text-5xl">{channel.name}</h1>
           <p className="mt-2 text-zinc-400">@{channel.handle}</p>
           <p className="mt-5 max-w-3xl whitespace-pre-wrap leading-7 text-zinc-300">{channel.description || "Kreator ini belum menambahkan deskripsi."}</p>
+          <CreatorFollowButton
+            channelId={channel.id}
+            initialFollowing={Boolean(existingFollow)}
+            initialFollowers={followerCount ?? 0}
+            loggedIn={Boolean(user)}
+            ownChannel={user?.id === channel.user_id}
+          />
         </section>
         <section className="mt-10">
           <div className="flex flex-wrap items-end justify-between gap-3">
