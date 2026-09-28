@@ -20,7 +20,7 @@ export default async function CreatorStudioPage() {
       .eq("user_id", user.id)
       .maybeSingle(),
     db.from("creator_videos")
-      .select("id,title,description,status,created_at,thumbnail_path")
+      .select("id,title,description,status,created_at,thumbnail_path,scan_status")
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false })
       .limit(100)
@@ -36,7 +36,11 @@ export default async function CreatorStudioPage() {
         <div className="mb-8 mt-5">
           <p className="text-sm font-semibold uppercase tracking-[0.2em] text-red-400">NEXORA FILM · CREATOR</p>
           <h1 className="mt-3 text-4xl font-black sm:text-5xl">Creator Studio</h1>
-          <p className="mt-3 max-w-2xl text-zinc-400">Kelola channel, unggah video, dan pantau status peninjauan konten Anda.</p>
+          <p className="mt-3 max-w-2xl text-zinc-400">Kelola channel, unggah Shorts, dan pantau status pemindaian serta peninjauan konten Anda.</p>
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Link href="/creator/analytics" className="rounded-full bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500">Analytics & Monetisasi →</Link>
+            <Link href="/creator/guide" className="rounded-full border border-white/15 px-4 py-2.5 text-sm text-zinc-200 hover:bg-white/5">Guide & Peraturan</Link>
+          </div>
         </div>
         {setupError ? (
           <div role="alert" className="rounded-xl border border-red-500/30 bg-red-950/30 p-5">
