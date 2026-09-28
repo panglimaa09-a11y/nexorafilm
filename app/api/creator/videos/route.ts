@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 import { scanCreatorVideo } from "@/lib/video-safety-scan";
 
 export const runtime = "nodejs";
+export const maxDuration = 90;
 
 export async function POST(req: Request) {
   try {
