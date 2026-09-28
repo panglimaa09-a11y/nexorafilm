@@ -10,192 +10,86 @@ NEXORA FILM adalah platform streaming Next.js + Supabase untuk konten video yang
 - Watchlist + riwayat tontonan
 - Subscription dan entitlement per film
 - Admin CMS: tambah, edit, publish/unpublish film
-- **Akses video Regular / Premium / Semua / Custom**
-- **Auto Import:** taruh banyak video ke `media/movies`, jalankan satu perintah, film masuk database + Supabase Storage otomatis
+- Akses video Regular / Premium / Semua / Custom
+- Auto Import dari folder media/movies ke Supabase Storage
 - Storage video private + signed URL setelah entitlement diverifikasi
 - Progress video tersimpan
-- Midtrans Snap checkout + webhook
+- Pakasir API v2 hosted checkout dan verifikasi webhook server-side
 
-## 1. Install
+## 1. Install dan jalankan
 
-```bash
+~~~bash
 npm install
-```
+cp .env.example .env.local
+npm run dev
+~~~
+
+Buka http://localhost:3000.
 
 ## 2. Environment
 
-```bash
-cp .env.example .env.local
-```
+Isi .env.local dengan URL Supabase, anon key, service role key, dan konfigurasi Pakasir berikut:
 
-Isi:
-
-```env
+~~~env
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-MIDTRANS_SERVER_KEY=
-MIDTRANS_IS_PRODUCTION=false
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
+NEXT_PUBLIC_APP_URL=https://DOMAIN-KAMU
+PAKASIR_PROJECT_SLUG=
+PAKASIR_API_KEY=
+PAKASIR_PAYMENT_METHOD=payment_link
+~~~
 
-`SUPABASE_SERVICE_ROLE_KEY` adalah rahasia server. Jangan masukkan ke client, GitHub, atau screenshot.
+Ambil slug dan API key dari detail proyek Pakasir. **Jangan pernah memakai prefix NEXT_PUBLIC_ untuk API key Pakasir atau service-role key Supabase, dan jangan commit .env.local.**
 
-## 3. Database
+Metode payment_link mengarahkan pelanggan ke halaman checkout Pakasir. Pelanggan dapat memilih QRIS atau Virtual Account yang diaktifkan dan tersedia di proyek Pakasir. Dukungan bank/metode bergantung pada konfigurasi akun Pakasir.
 
-Jalankan `supabase/schema.sql` di Supabase SQL Editor.
+## 3. Database dan aktivasi langganan
 
-Schema ini juga menambahkan:
+Jalankan supabase/schema.sql pada Supabase SQL Editor jika database belum disiapkan. Untuk database yang sudah ada, jalankan juga migrasi:
 
-- `movies.video_path`
-- fungsi `public.is_admin()`
-- policy admin untuk `movies`, `movie_plans`, dan `plans`
+~~~text
+supabase/migrations/20260928_pakasir_subscription_activation.sql
+~~~
 
-Jika database lama sudah pernah dibuat, **jalankan ulang file SQL** karena semua statement dibuat idempotent dengan `if not exists` / `drop policy if exists` dan kolom `video_path` memakai `add column if not exists`.
+Migrasi tersebut membuat fungsi server-side activate_pakasir_subscription yang dipanggil setelah status pembayaran diverifikasi. Pastikan migrasi berhasil sebelum melakukan transaksi nyata.
 
-Untuk akun admin pertama:
+## 4. Konfigurasi webhook Pakasir
 
-```sql
-select id, email, email_confirmed_at from auth.users;
-select id, display_name, role from public.profiles;
+Di pengaturan proyek Pakasir, isi webhook URL dengan URL HTTPS publik:
 
-update public.profiles
-set role = 'admin'
-where id = 'UUID_AKUN_KAMU';
-```
-
-Jangan mengubah `auth.users.confirmed_at` secara manual.
-
-## 4. Jalankan
-
-```bash
-npm run dev
-```
-
-Buka `http://localhost:3000`.
-
-## 5. Auto Import — tanpa input film satu per satu
-
-Buat folder:
-
-```text
-media/movies/
-```
-
-Masukkan file video milikmu/lisensimu, misalnya:
-
-```text
-media/movies/
-├── Film Pertama.mp4
-├── Film Kedua.mp4
-└── Film Ketiga.webm
-```
-
-Lalu:
-
-### Regular
-Mobile + Standard:
-
-```bash
-npm run import:movies -- --access=regular
-```
-
-### Premium
-Premium + Family:
-
-```bash
-npm run import:movies -- --access=premium
-```
-
-### Semua paket
-
-```bash
-npm run import:movies -- --access=all
-```
-
-Format yang dibaca: `.mp4`, `.webm`, `.mov`, `.m4v`.
-
-Nama file otomatis menjadi judul. Script akan:
-
-1. membaca video dari `media/movies`
-2. membuat bucket private `nexora-videos` jika belum ada
-3. upload video ke Supabase Storage
-4. membuat / memperbarui record film
-5. mengatur entitlement paket
-6. publish film
-
-Poster, sinopsis, tahun, dan metadata tambahan bisa diedit dari CMS setelah import. Untuk katalog besar, gunakan pipeline metadata/thumbnail terpisah; jangan mengunduh atau menyalin film berhak cipta tanpa izin.
-
-## 6. Mengubah Regular ↔ Premium
-
-Masuk sebagai admin → **Kelola Film** → **Edit**.
-
-Pilihan akses:
-
-- **Regular:** Mobile + Standard
-- **Premium:** Premium + Family
-- **Semua paket**
-- **Custom:** pilih paket sendiri
-
-Perubahan entitlement langsung menentukan siapa yang boleh membuka player.
-
-## 7. Keamanan video
-
-Video hasil Auto Import disimpan di bucket **private**. Browser tidak mendapatkan URL permanen. Saat user menekan Putar, server memeriksa:
-
-1. user sudah login
-2. film published
-3. subscription masih aktif
-4. paket subscription punya entitlement untuk film
-5. server membuat signed URL sementara
-
-Ini lebih aman daripada menyimpan URL public video di halaman.
-
-## 8. Midtrans
-
-Sandbox:
-
-```env
-MIDTRANS_IS_PRODUCTION=false
-```
-
-Webhook produksi harus menggunakan URL HTTPS publik:
-
-```text
+~~~text
 https://DOMAIN-KAMU/api/payment/webhook
-```
+~~~
 
-Untuk local development, gunakan tunnel HTTPS jika Midtrans perlu mengakses webhook lokal.
+Jangan gunakan localhost sebagai URL webhook produksi; server Pakasir tidak dapat mengakses localhost di komputer kamu.
 
-## 9. Catatan produksi
+Webhook tidak dipercaya begitu saja: server mencari order yang cocok, memeriksa nominal, lalu memverifikasi transaksi ke API status Pakasir sebelum mengubah status pembayaran dan mengaktifkan langganan. Pengalihan kembali ke situs setelah checkout bukan bukti pembayaran berhasil.
 
-Untuk katalog besar/komersial, tambahkan video transcoding HLS/DASH, adaptive bitrate, CDN, signed playback policy, thumbnail generator, subtitle, series/seasons/episodes, rate limiting, audit log, payment reconciliation, refund/cancellation, dan monitoring.
+## 5. Admin Agent (9router)
 
+Tambahkan ke .env.local:
 
-## 🤖 NEXORA Admin Agent
-
-Buka `/admin/agent` setelah login sebagai admin. Agent menggunakan endpoint OpenAI-compatible 9router yang dikonfigurasi lewat `.env.local`. Agent dapat menjalankan pekerjaan katalog nyata: melihat daftar film, Auto Import dari `media/movies`, mengubah akses Regular/Premium/semua paket, publish/draft, dan mengubah judul/sinopsis/tahun.
-
-Tambahkan ke `.env.local`:
-
-```env
+~~~env
 NEXORA_9ROUTER_URL=http://127.0.0.1:20128/v1
 NEXORA_9ROUTER_API_KEY=
 NEXORA_AGENT_MODEL=gratisan
-```
+~~~
 
-Jika 9router kamu memakai API key atau model lain, isi sesuai konfigurasi 9router kamu. `SUPABASE_SERVICE_ROLE_KEY` tetap hanya di server.
+Sesuaikan model dan API key dengan konfigurasi 9router. Agent tersedia di /admin/agent setelah login sebagai admin.
 
-Contoh perintah Agent:
-- `Tampilkan daftar film`
-- `Jadikan Film A premium`
-- `Publish Film A`
-- `Jadikan Film A regular`
-- `Import semua film dari media/movies dengan akses premium`
+## 6. Auto Import film
 
-Catatan: video yang diimport harus merupakan konten yang kamu miliki atau punya lisensi untuk ditayangkan.
+Masukkan video milikmu atau yang berlisensi ke media/movies/, lalu jalankan:
 
+~~~bash
+npm run import:movies -- --access=regular
+npm run import:movies -- --access=premium
+npm run import:movies -- --access=all
+~~~
 
-## Admin Agent
+Script mengunggah video ke bucket private Supabase Storage, membuat/memperbarui metadata film, dan mengatur entitlement paket. Format yang didukung: .mp4, .webm, .mov, dan .m4v.
 
-Agent selalu meminta konfirmasi sebelum perubahan katalog.
+## 7. Catatan produksi
+
+Sebelum menerima pembayaran pelanggan, uji checkout, callback/webhook, verifikasi status, dan aktivasi langganan pada proyek Pakasir yang sesuai. Periksa log server dan Vercel untuk kegagalan. Jangan pernah mengaktifkan langganan hanya berdasarkan query string atau redirect browser.
