@@ -1,6 +1,7 @@
 ﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-admin";
 import AdminCreatorModerationClient from "@/components/AdminCreatorModerationClient";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +20,16 @@ export default async function AdminCreatorsPage() {
 
   if (profile?.role !== "admin") redirect("/");
 
+  const adminDb = createAdminClient();
+
   const [
     { data: channels, error: channelsError },
     { data: videos, error: videosError },
   ] = await Promise.all([
-    db.from("creator_channels")
+    adminDb.from("creator_channels")
       .select("id,user_id,name,handle,description,status,created_at")
       .order("created_at", { ascending: false }),
-    db.from("creator_videos")
+    adminDb.from("creator_videos")
       .select("id,channel_id,owner_id,title,description,storage_path,status,moderation_note,created_at")
       .order("created_at", { ascending: false }),
   ]);
