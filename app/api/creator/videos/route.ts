@@ -73,6 +73,7 @@ export async function POST(req: Request) {
         description,
         storage_path: storagePath,
         thumbnail_path: thumbnailPath,
+        video_type: "short",
         status: "review"
       })
       .select("id,title,description,status,created_at,thumbnail_path")
