@@ -45,6 +45,8 @@ export default async function CreatorWatchPage({
     throw new Error("File video tidak bisa diakses. Periksa file di Supabase Storage.");
   }
 
+  await admin.rpc("increment_creator_video_view", { p_video_id: id });
+
   return (
     <main className="min-h-screen bg-black px-4 py-6 text-white sm:px-8">
       <div className="mx-auto max-w-6xl">
