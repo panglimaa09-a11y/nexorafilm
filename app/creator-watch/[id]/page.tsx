@@ -18,6 +18,7 @@ export default async function CreatorWatchPage({
     .eq("id", id)
     .eq("status", "published")
     .eq("video_type", "short")
+    .eq("scan_status", "safe")
     .maybeSingle();
 
   if (error) {
@@ -43,6 +44,8 @@ export default async function CreatorWatchPage({
     console.error("Creator video signed URL failed:", storageError?.message);
     throw new Error("File video tidak bisa diakses. Periksa file di Supabase Storage.");
   }
+
+  await admin.rpc("increment_creator_video_view", { p_video_id: id });
 
   return (
     <main className="min-h-screen bg-black px-4 py-6 text-white sm:px-8">

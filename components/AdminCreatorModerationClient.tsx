@@ -22,6 +22,9 @@ type Video = {
   storage_path: string;
   status: string;
   moderation_note: string | null;
+  scan_status?: string;
+  scan_provider?: string | null;
+  scanned_at?: string | null;
   created_at: string;
 };
 
@@ -60,6 +63,26 @@ export default function AdminCreatorModerationClient({
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Terjadi kesalahan.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function rescan(id: string) {
+    setBusy("scan:" + id);
+    setMessage("");
+    try {
+      const response = await fetch("/api/admin/creator-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Scan gagal.");
+      setMessage(result.note || ("Safety scan: " + result.scan_status));
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Safety scan gagal.");
     } finally {
       setBusy("");
     }
@@ -151,6 +174,7 @@ export default function AdminCreatorModerationClient({
                     <p className="mt-2 whitespace-pre-wrap text-sm text-slate-400">{video.description || "Tanpa deskripsi."}</p>
                     <p className="mt-2 break-all text-xs text-slate-500">Video ID: {video.id}</p>
                     <p className="mt-1 break-all text-xs text-slate-500">Channel ID: {video.channel_id}</p>
+                    <p className="mt-2 text-sm text-cyan-200">Safety scan: {video.scan_status || "pending"}{video.scan_provider ? " · " + video.scan_provider : ""}</p>
                     {video.moderation_note && (
                       <p className="mt-2 text-sm text-amber-300">Catatan: {video.moderation_note}</p>
                     )}
@@ -158,6 +182,9 @@ export default function AdminCreatorModerationClient({
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs">{video.status}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <button className={buttonClass} disabled={!!busy} onClick={() => void rescan(video.id)}>
+                    {busy === "scan:" + video.id ? "Memindai..." : "Jalankan safety scan"}
+                  </button>
                   {video.status !== "published" && (
                     <button className={buttonClass} disabled={!!busy}
                       onClick={() => {

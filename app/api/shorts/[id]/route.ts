@@ -26,10 +26,11 @@ export async function GET(
 
   const { data: video, error } = await admin
     .from("creator_videos")
-    .select("storage_path,video_type,status,channel_id")
+    .select("storage_path,video_type,status,channel_id,scan_status")
     .eq("id", id)
     .eq("status", "published")
     .eq("video_type", "short")
+    .eq("scan_status", "safe")
     .maybeSingle();
 
   if (error || !video?.storage_path) {
@@ -54,6 +55,9 @@ export async function GET(
   if (signError || !signed?.signedUrl) {
     return NextResponse.json({ error: "Video belum dapat diputar." }, { status: 503 });
   }
+
+  // Count playback requests for published, safety-scanned Shorts only.
+  await admin.rpc("increment_creator_video_view", { p_video_id: id });
 
   return NextResponse.redirect(signed.signedUrl, {
     headers: { "Cache-Control": "private, no-store" }
