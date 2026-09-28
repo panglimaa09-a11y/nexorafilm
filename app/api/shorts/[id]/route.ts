@@ -30,7 +30,6 @@ export async function GET(
     .eq("id", id)
     .eq("status", "published")
     .eq("video_type", "short")
-    .eq("scan_status", "safe")
     .maybeSingle();
 
   if (error || !video?.storage_path) {
