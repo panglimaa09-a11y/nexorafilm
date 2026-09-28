@@ -30,18 +30,9 @@ export async function POST(request: Request) {
     const apiKey = process.env.PAKASIR_API_KEY;
     const method = (process.env.PAKASIR_PAYMENT_METHOD || 'payment_link').trim();
 
-    const methods = [
-      'payment_link',
-      'qris',
-      'bri_va',
-      'bni_va',
-      'cimb_niaga_va',
-      'permata_va',
-      'maybank_va',
-      'bnc_va',
-      'artha_graha_va',
-      'sampoerna_va',
-    ];
+    // This checkout flow redirects to a Pakasir payment link. Other methods
+    // need their own QR/VA display flow and must not be enabled here yet.
+    const methods = ['payment_link'];
 
     if (!slug || !apiKey || !methods.includes(method)) {
       return NextResponse.redirect(
