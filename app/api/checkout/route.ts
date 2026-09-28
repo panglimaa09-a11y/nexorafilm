@@ -1,10 +1,12 @@
 import { createClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
+    // Authenticate with the user's session before using the service-role client.
     const db = await createClient();
     const { data: { user }, error: authError } = await db.auth.getUser();
 
@@ -15,42 +17,41 @@ export async function POST(request: Request) {
     const form = await request.formData();
     const planId = String(form.get('plan_id') || '').trim();
 
-    const { data: plan } = await db
+    const { data: plan, error: planError } = await db
       .from('plans')
-      .select('*')
+      .select('id,name,price_monthly')
       .eq('id', planId)
       .eq('active', true)
       .maybeSingle();
 
-    if (!plan) {
+    if (planError || !plan) {
       return NextResponse.redirect(new URL('/plans?error=plan', request.url), 303);
     }
 
-    const slug = process.env.PAKASIR_PROJECT_SLUG;
-    const apiKey = process.env.PAKASIR_API_KEY;
+    const slug = process.env.PAKASIR_PROJECT_SLUG?.trim();
+    const apiKey = process.env.PAKASIR_API_KEY?.trim();
+    // Hosted checkout lets customers choose the payment methods enabled for this project.
     const method = (process.env.PAKASIR_PAYMENT_METHOD || 'payment_link').trim();
 
-    // This checkout flow redirects to a Pakasir payment link. Other methods
-    // need their own QR/VA display flow and must not be enabled here yet.
-    const methods = ['payment_link'];
-
-    if (!slug || !apiKey || !methods.includes(method)) {
+    if (!slug || !apiKey || method !== 'payment_link') {
       return NextResponse.redirect(
         new URL('/checkout?error=payment_not_configured', request.url), 303
       );
     }
 
     const amount = Number(plan.price_monthly);
-
     if (!Number.isSafeInteger(amount) || amount < 500 || amount > 50000000) {
       return NextResponse.redirect(
         new URL('/checkout?error=invalid_plan_amount', request.url), 303
       );
     }
 
-    const orderId = `NEXORA-${user.id.slice(0, 8)}-${Date.now()}`;
+    const orderId = `NEXORA-${user.id.slice(0, 8)}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const adminDb = createAdminClient();
 
-    const { data: payment, error: insertError } = await db
+    // payments has RLS enabled without user INSERT/UPDATE policies in schema.sql.
+    // Keep payment writes on the server-side service-role client.
+    const { data: payment, error: insertError } = await adminDb
       .from('payments')
       .insert({
         user_id: user.id,
@@ -72,90 +73,68 @@ export async function POST(request: Request) {
 
     let response: Response;
     let payload: any;
-
     try {
       response = await fetch(
         `https://app.pakasir.com/api/v2/create-transaction/${encodeURIComponent(slug)}/${encodeURIComponent(orderId)}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Api-Key': apiKey,
-          },
+          headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
           body: JSON.stringify({ method, amount }),
           cache: 'no-store',
           signal: AbortSignal.timeout(15000),
         }
       );
-
       payload = await response.json();
     } catch (error) {
-      await db
-        .from('payments')
-        .update({
-          status: 'failed',
-          raw_response: { error: 'pakasir_request_failed' },
-        })
-        .eq('id', payment.id);
-
+      await adminDb.from('payments').update({
+        status: 'failed',
+        raw_response: { error: 'pakasir_request_failed' },
+      }).eq('id', payment.id);
       console.error('Pakasir request failed:', error);
-
       return NextResponse.redirect(
         new URL('/checkout?error=payment_gateway', request.url), 303
       );
     }
 
     let paymentLink: URL | null = null;
-
     try {
       paymentLink = new URL(String(payload?.payment_link || ''));
     } catch {
       paymentLink = null;
     }
 
-    const txnId =
-      typeof payload?.txn_id === 'string' ? payload.txn_id.trim() : '';
-
+    const txnId = typeof payload?.txn_id === 'string' ? payload.txn_id.trim() : '';
     if (
-      !response.ok ||
-      !txnId ||
-      !paymentLink ||
-      paymentLink.protocol !== 'https:' ||
-      paymentLink.hostname !== 'app.pakasir.com'
+      !response.ok || !txnId || !paymentLink ||
+      paymentLink.protocol !== 'https:' || paymentLink.hostname !== 'app.pakasir.com'
     ) {
-      await db
-        .from('payments')
-        .update({
-          status: 'failed',
-          raw_response: {
-            pakasir: payload,
-            http_status: response.status,
-          },
-        })
-        .eq('id', payment.id);
-
+      await adminDb.from('payments').update({
+        status: 'failed',
+        raw_response: { pakasir: payload, http_status: response.status },
+      }).eq('id', payment.id);
       return NextResponse.redirect(
         new URL('/checkout?error=payment_gateway', request.url), 303
       );
     }
 
-    const origin = process.env.NEXT_PUBLIC_APP_URL
-      ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
-      : new URL(request.url).origin;
+    let origin: string;
+    try {
+      origin = process.env.NEXT_PUBLIC_APP_URL
+        ? new URL(process.env.NEXT_PUBLIC_APP_URL).origin
+        : new URL(request.url).origin;
+    } catch {
+      origin = new URL(request.url).origin;
+    }
 
-    paymentLink.searchParams.set(
-      'redirect',
-      `${origin}/profile?payment=pending`
-    );
+    paymentLink.searchParams.set('redirect', `${origin}/profile?payment=pending`);
 
-    const { error: saveError } = await db
+    const { error: saveError } = await adminDb
       .from('payments')
       .update({ raw_response: { pakasir: payload } })
       .eq('id', payment.id);
 
     if (saveError) {
       console.error('Pakasir response save failed:', saveError.message);
-
       return NextResponse.redirect(
         new URL('/checkout?error=payment_record', request.url), 303
       );
@@ -164,7 +143,6 @@ export async function POST(request: Request) {
     return NextResponse.redirect(paymentLink.toString(), 303);
   } catch (error) {
     console.error('Checkout error:', error);
-
     return NextResponse.redirect(
       new URL('/checkout?error=unexpected', request.url), 303
     );
@@ -175,9 +153,10 @@ export async function GET() {
   return NextResponse.json({
     provider: 'pakasir',
     configured: Boolean(
-      process.env.PAKASIR_PROJECT_SLUG &&
-      process.env.PAKASIR_API_KEY
+      process.env.PAKASIR_PROJECT_SLUG?.trim() &&
+      process.env.PAKASIR_API_KEY?.trim()
     ),
     apiVersion: 2,
+    paymentMethod: process.env.PAKASIR_PAYMENT_METHOD || 'payment_link',
   });
 }
