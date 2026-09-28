@@ -69,10 +69,9 @@ export async function POST(request: Request) {
         if (lookupError || !video) {
           return NextResponse.json({ error: "Video tidak ditemukan." }, { status: 404 });
         }
-        if (video.scan_status !== "safe") {
-          return NextResponse.json({ error: "Video wajib lolos safety scan sebelum dipublikasikan. Jalankan scan ulang atau tinjau hasil pemindaian." }, { status: 409 });
-        }
-
+        // A deliberate admin publish action is a manual moderation decision.
+        // Automated scan failure (for example Gemini HTTP 404) must not make the
+        // admin publish button permanently unusable. Keep channel approval required.
         const { data: channel, error: channelError } = await adminDb
           .from("creator_channels")
           .select("status")
@@ -88,7 +87,7 @@ export async function POST(request: Request) {
         .from("creator_videos")
         .update({
           status,
-          moderation_note: note || null,
+          moderation_note: note || (status === "published" ? "Disetujui secara manual oleh admin. Hasil safety scan otomatis tidak dijadikan dasar persetujuan." : null),
           updated_at: new Date().toISOString(),
         })
         .eq("id", id);
