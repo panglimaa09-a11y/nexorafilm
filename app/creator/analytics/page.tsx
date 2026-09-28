@@ -33,11 +33,13 @@ export default async function CreatorAnalyticsPage() {
     { count: followers },
     { count: following },
     { data: watchEvents, error: watchEventsError },
+    { data: allPublishedVideoRows, error: allPublishedVideosError },
   ] = await Promise.all([
     admin.from("creator_videos").select("id,title,status,view_count,scan_status,created_at").eq("owner_id", user.id).eq("video_type", "short").order("created_at", { ascending: false }).limit(200),
     admin.from("creator_follows").select("*", { count: "exact", head: true }).eq("channel_id", channel.id),
     admin.from("creator_follows").select("*", { count: "exact", head: true }).eq("follower_id", user.id),
     admin.from("creator_watch_events").select("video_id,watched_seconds,watch_date").eq("channel_id", channel.id).gte("watch_date", new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)),
+    admin.from("creator_videos").select("id").eq("owner_id", user.id).eq("video_type", "short").eq("status", "published"),
   ]);
 
   const allVideos = videos ?? [];
@@ -45,7 +47,7 @@ export default async function CreatorAnalyticsPage() {
   const totalViews = published.reduce((sum, video) => sum + Number(video.view_count ?? 0), 0);
   const pending = allVideos.filter((video) => video.status === "review" || video.scan_status !== "safe").length;
   const followerCount = followers ?? 0;
-  const publishedVideoIds = new Set(published.map((video) => video.id));
+  const publishedVideoIds = new Set((allPublishedVideoRows ?? []).map((video) => video.id));
   const watchHours = (watchEvents ?? [])
     .filter((event) => publishedVideoIds.has(event.video_id))
     .reduce((sum, event) => sum + Number(event.watched_seconds ?? 0), 0) / 3600;
@@ -62,7 +64,7 @@ export default async function CreatorAnalyticsPage() {
         </header>
 
         {videosError && <div role="alert" className="mt-6 rounded-xl border border-red-500/30 bg-red-950/20 p-4 text-sm text-red-200">Statistik video belum bisa dimuat: {videosError.message}</div>}
-        {watchEventsError && <div role="alert" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-sm text-amber-200">Data jam tayang belum bisa dimuat: {watchEventsError.message}. Periksa migrasi monetisasi dan tabel creator_watch_events.</div>}
+        {(watchEventsError || allPublishedVideosError) && <div role="alert" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-950/20 p-4 text-sm text-amber-200">Data jam tayang belum bisa dimuat: {watchEventsError?.message || allPublishedVideosError?.message}. Periksa migrasi monetisasi dan tabel creator_watch_events.</div>}
 
         <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <article className="rounded-2xl border border-white/10 bg-white/[.04] p-5"><p className="text-sm text-zinc-400">Pengikut</p><p className="mt-3 text-3xl font-black">{idr(followerCount)}</p><p className="mt-2 text-xs text-zinc-500">Akun yang mengikuti channel</p></article>
