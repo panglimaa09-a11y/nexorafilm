@@ -211,20 +211,22 @@ Run these SQL files in Supabase SQL Editor in order, after the existing creator 
 
 Creator Studio community uploads are Shorts only. Public creator profiles support follow/unfollow. A signed-in creator can open `/creator/analytics` to see follower count, published Shorts, counted playback requests, scan states, and initial monetization eligibility targets. The targets shown are 1,000 followers and 10,000 counted playback requests; they are not a promise of revenue or payout. Payment/payout rails and final eligibility approval must be implemented separately.
 
-### Automated video safety scan with Gemini
+### Automated video safety scan with Atria
 
-Set this server-only environment variable in Vercel and local `.env.local`:
+Set these server-only environment variables in Vercel and local `.env.local`:
 
 ```env
-GEMINI_API_KEY=your_google_ai_studio_api_key
+ATRIA_API_KEY=your_rotated_atria_api_key
+ATRIA_BASE_URL=https://api.atria-asi.ai/v1
+ATRIA_MODEL=Atria-Dawn-Preview
 ```
 
-The backend uses Gemini video understanding to inspect the uploaded video's actual frames/audio via Gemini Files API, then classifies it as `safe`, `blocked`, or `review`. The key stays on the server. It uses `gemini-2.5-flash` by default in the scanner. Confirm model availability and the current free-tier quotas/pricing for your Google AI Studio account.
+Atria is the primary scanner when `ATRIA_API_KEY` is configured. The server downloads the private video, uses FFmpeg to sample up to six frames distributed across its duration, and sends those images plus title/description to Atria's OpenAI-compatible Chat Completions endpoint. The scanner does **not** analyze audio, and sampled frames can miss events between frames; uncertain results must stay in review. It uses `safe`, `blocked`, `review`, or `unavailable` decisions. The API key stays server-side. If Atria rejects image inputs or the model cannot confidently classify the samples, the video remains unpublished.
 
-For Shorts, a `safe` result specifically from Gemini automatically publishes the video when its creator channel is active. `blocked` results are rejected; `review`, `unavailable`, timeouts, invalid responses, and other uncertain results stay unpublished for admin review. Other moderation providers continue to use manual review. A passing AI scan is not a guarantee: AI moderation can miss violations, so keep reporting and admin takedown tools available.
+For Shorts, an Atria `safe` result automatically publishes the video only when its creator channel is active. `blocked` results are rejected; `review`, `unavailable`, timeouts, invalid responses, and other uncertain results stay unpublished for admin review. Gemini remains as a fallback only when `ATRIA_API_KEY` is not configured. A passing AI scan is not a guarantee: AI moderation can miss violations, so keep reporting and admin takedown tools available.
 
-Gemini Files API uploads are deleted after the scan where possible. Video scanning runs synchronously during upload, so long videos or slow processing can time out in serverless hosting; such videos remain unpublished and require manual review. For production-scale uploads, use an asynchronous queue/worker.
+Automatic scanning currently limits downloaded video files to 100 MB and uses a synchronous serverless request. Long videos or slow processing may time out and remain unpublished for manual review. For production-scale uploads, use an asynchronous queue/worker and a full video/audio moderation pipeline.
 
-An optional fallback adapter for another moderation service is still supported through `VIDEO_MODERATION_API_URL` and `VIDEO_MODERATION_API_KEY`. That endpoint must accept JSON with `video_url`, `video_id`, `title`, `description`, `task`, and `required_checks`, then return a JSON decision. Do not configure both unless you intentionally want Gemini to take precedence.
+An optional fallback adapter for a separately hosted moderation service is still supported through `VIDEO_MODERATION_API_URL` and `VIDEO_MODERATION_API_KEY`. That endpoint must accept JSON with `video_url`, `video_id`, `title`, `description`, `task`, and `required_checks`, then return a JSON decision.
 
 Playback counts currently record requests to the signed playback route, not verified unique viewers. They can include repeat requests and must be fraud-filtered before being used to calculate actual earnings.
