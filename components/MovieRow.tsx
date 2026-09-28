@@ -1,0 +1,2 @@
+import MovieCard from "./MovieCard";
+export default function MovieRow({title,movies}:{title:string,movies:any[]}){return <section className="mb-10"><h2 className="mb-4 text-xl md:text-2xl font-bold">{title}</h2><div className="flex gap-4 overflow-x-auto pb-2">{movies.map(m=><MovieCard key={m.id} movie={m}/>)}</div></section>}

@@ -1,0 +1,34 @@
+node_modules
+.next
+.env*
+!.env.example
+# Local backups and audit artifacts
+.creator-backup-*/
+.map-fix-backup-*/
+backups/
+*.backup
+*.backup-*
+*.security-backup-*
+monetization-audit-detail.txt
+
+# Local backup folders
+.*-backup-*/
+.creator-backup-*/
+.map-fix-backup-*/
+.patch-backup-*/
+.recovery-safety-*/
+.null-fix-backup-*/
+.final-null-backup-*/
+.fix-plans-links-*/
+.ts-fix-backup-*/
+.admin-dashboard-backup-*/
+.creator-discovery-backup-*/
+.creator-profile-backup-*/
+.security-backup-*/
+backups/
+*.backup
+*.backup-*
+*.security-backup-*
+monetization-audit*.txt
+payment-schema-check.txt
+*.tsbuildinfo

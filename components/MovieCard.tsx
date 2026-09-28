@@ -1,0 +1,2 @@
+import Link from "next/link";
+export default function MovieCard({movie}:{movie:any}){return <Link href={`/movies/${movie.id}`} className="group min-w-[150px] md:min-w-[190px]"><div className="aspect-[2/3] overflow-hidden rounded-xl bg-zinc-900"><img src={movie.poster_url||"/placeholder.svg"} alt={movie.title} className="h-full w-full object-cover transition group-hover:scale-105"/></div><div className="mt-2 truncate font-semibold">{movie.title}</div><div className="text-xs text-zinc-500">{movie.release_year||""}</div></Link>}
