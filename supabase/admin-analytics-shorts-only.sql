@@ -86,4 +86,54 @@ revoke all on function public.admin_revenue_analytics() from anon;
 grant execute on function public.admin_revenue_analytics() to authenticated;
 
 
+
+-- Prevent client-side direct Supabase updates from bypassing review or activating channels.
+-- Admin API operations use the server-only service role after checking the admin session.
+create or replace function public.guard_creator_channel_owner_updates()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+begin
+  if auth.uid() is not null and not public.is_admin()
+     and new.status is distinct from old.status then
+    raise exception 'Only admins can change creator channel status' using errcode = '42501';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists creator_channel_status_guard on public.creator_channels;
+create trigger creator_channel_status_guard
+before update on public.creator_channels
+for each row execute function public.guard_creator_channel_owner_updates();
+
+create or replace function public.guard_creator_video_owner_updates()
+returns trigger
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    if new.owner_id is distinct from old.owner_id
+       or new.channel_id is distinct from old.channel_id
+       or new.storage_path is distinct from old.storage_path
+       or new.status is distinct from old.status
+       or new.video_type is distinct from old.video_type
+       or new.view_count is distinct from old.view_count then
+      raise exception 'Only admins can change protected creator video fields' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists creator_video_status_guard on public.creator_videos;
+create trigger creator_video_status_guard
+before update on public.creator_videos
+for each row execute function public.guard_creator_video_owner_updates();
+
+
 commit;
