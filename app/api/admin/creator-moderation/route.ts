@@ -87,7 +87,9 @@ export async function POST(request: Request) {
         .from("creator_videos")
         .update({
           status,
-          moderation_note: note || (status === "published" ? "Disetujui secara manual oleh admin. Hasil safety scan otomatis tidak dijadikan dasar persetujuan." : null),
+          moderation_note: status === "published"
+            ? `Disetujui secara manual oleh admin.${note ? ` Catatan: ${note}` : " Hasil safety scan otomatis tidak dijadikan dasar persetujuan."}`
+            : note || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", id);
