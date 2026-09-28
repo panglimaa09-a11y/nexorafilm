@@ -211,21 +211,20 @@ Run these SQL files in Supabase SQL Editor in order, after the existing creator 
 
 Creator Studio community uploads are Shorts only. Public creator profiles support follow/unfollow. A signed-in creator can open `/creator/analytics` to see follower count, published Shorts, counted playback requests, scan states, and initial monetization eligibility targets. The targets shown are 1,000 followers and 10,000 counted playback requests; they are not a promise of revenue or payout. Payment/payout rails and final eligibility approval must be implemented separately.
 
-### Automated video safety scan
+### Automated video safety scan with Gemini
 
-Set these server-only environment variables in Vercel and local `.env.local`:
+Set this server-only environment variable in Vercel and local `.env.local`:
 
 ```env
-VIDEO_MODERATION_API_URL=https://YOUR-VIDEO-SAFETY-SERVICE/scan
-VIDEO_MODERATION_API_KEY=YOUR_SERVER_SIDE_SECRET
+GEMINI_API_KEY=your_google_ai_studio_api_key
 ```
 
-The configured endpoint must accept a JSON POST with `video_url`, `video_id`, `title`, `description`, `task`, and `required_checks`, then return JSON such as:
+The backend uses Gemini video understanding to inspect the uploaded video's actual frames/audio via Gemini Files API, then classifies it as `safe`, `blocked`, or `review`. The key stays on the server. It uses `gemini-2.5-flash` by default in the scanner. Confirm model availability and the current free-tier quotas/pricing for your Google AI Studio account.
 
-```json
-{ "decision": "safe" }
-```
+The scan is fail-closed: upload errors, unsupported media, timeouts, invalid responses, and uncertain results do not permit publication. A passing AI scan is not final approval; the video remains in the admin review queue. AI moderation can miss violations and should not be treated as a guarantee.
 
-Allowed decisions are `safe`, `blocked`, and `review`. Any unknown response, timeout, HTTP error, or missing configuration fails closed: the video remains unpublished. The scanner must actually analyze the video bytes/frames/audio; checking only title/description is not sufficient. Use a trusted video-moderation provider and verify its contract before enabling it. Admins can run a scan again from the creator moderation queue. A passing automated scan is not a substitute for human moderation.
+Gemini Files API uploads are deleted after the scan where possible. Video scanning runs synchronously during upload, so long videos or slow processing can time out in serverless hosting; such videos remain unpublished and require manual review. For production-scale uploads, use an asynchronous queue/worker.
+
+An optional fallback adapter for another moderation service is still supported through `VIDEO_MODERATION_API_URL` and `VIDEO_MODERATION_API_KEY`. That endpoint must accept JSON with `video_url`, `video_id`, `title`, `description`, `task`, and `required_checks`, then return a JSON decision. Do not configure both unless you intentionally want Gemini to take precedence.
 
 Playback counts currently record requests to the signed playback route, not verified unique viewers. They can include repeat requests and must be fraud-filtered before being used to calculate actual earnings.
