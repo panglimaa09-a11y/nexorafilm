@@ -160,10 +160,6 @@ export default function AdminCreatorModerationClient({
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs">{channel.status}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <button className={buttonClass} disabled={!!previewBusy}
-                    onClick={() => void previewVideo(video.id)}>
-                    {previewBusy === video.id ? "Membuka video..." : previewVideoId === video.id && previewUrl ? "Tutup video" : "▶ Lihat / Putar video"}
-                  </button>
                   {channel.status !== "active" && (
                     <button className={buttonClass} disabled={!!busy}
                       onClick={() => {
@@ -183,28 +179,6 @@ export default function AdminCreatorModerationClient({
                     </button>
                   )}
                 </div>
-                {previewVideoId === video.id && previewUrl && (
-                  <div className="mt-4 overflow-hidden rounded-xl border border-cyan-400/25 bg-black p-3">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <p className="text-sm font-medium text-cyan-200">Pratinjau privat untuk admin</p>
-                      <button type="button" className={buttonClass}
-                        onClick={() => { setPreviewVideoId(""); setPreviewUrl(""); }}>
-                        Tutup pemutar
-                      </button>
-                    </div>
-                    <video
-                      key={previewUrl}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      className="mx-auto max-h-[75vh] w-full rounded-lg bg-black"
-                      src={previewUrl}
-                    >
-                      Browser ini tidak mendukung pemutar video.
-                    </video>
-                    <p className="mt-2 text-xs text-slate-400">Tautan sementara dan hanya diberikan setelah pemeriksaan hak akses admin.</p>
-                  </div>
-                )}
               </article>
             ))}
           </div>
@@ -243,6 +217,10 @@ export default function AdminCreatorModerationClient({
                   <span className="rounded-full bg-white/10 px-3 py-1 text-xs">{video.status}</span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <button className={buttonClass} disabled={!!previewBusy}
+                    onClick={() => void previewVideo(video.id)}>
+                    {previewBusy === video.id ? "Membuka video..." : previewVideoId === video.id && previewUrl ? "Tutup video" : "▶ Lihat / Putar video"}
+                  </button>
                   <button className={buttonClass} disabled={!!busy} onClick={() => void rescan(video.id)}>
                     {busy === "scan:" + video.id ? "Memindai..." : "Jalankan safety scan"}
                   </button>
@@ -277,6 +255,28 @@ export default function AdminCreatorModerationClient({
                     </button>
                   )}
                 </div>
+                {previewVideoId === video.id && previewUrl && (
+                  <div className="mt-4 overflow-hidden rounded-xl border border-cyan-400/25 bg-black p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-cyan-200">Pratinjau privat untuk admin</p>
+                      <button type="button" className={buttonClass}
+                        onClick={() => { setPreviewVideoId(""); setPreviewUrl(""); }}>
+                        Tutup pemutar
+                      </button>
+                    </div>
+                    <video
+                      key={previewUrl}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      className="mx-auto max-h-[75vh] w-full rounded-lg bg-black"
+                      src={previewUrl}
+                    >
+                      Browser ini tidak mendukung pemutar video.
+                    </video>
+                    <p className="mt-2 text-xs text-slate-400">Tautan sementara dan hanya diberikan setelah pemeriksaan hak akses admin.</p>
+                  </div>
+                )}
               </article>
             ))}
           </div>
