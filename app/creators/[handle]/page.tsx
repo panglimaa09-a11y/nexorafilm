@@ -42,6 +42,7 @@ export default async function CreatorProfilePage({
     .eq("channel_id", channel.id)
     .eq("status", "published")
     .eq("video_type", "short")
+    .eq("scan_status", "safe")
     .order("created_at", { ascending: false });
 
   if (videoError) {
