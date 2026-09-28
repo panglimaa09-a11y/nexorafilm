@@ -41,7 +41,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Status channel tidak valid." }, { status: 400 });
       }
 
-      const { error } = await db
+      const { error } = await adminDb
         .from("creator_channels")
         .update({ status, updated_at: new Date().toISOString() })
         .eq("id", id);
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       }
 
       if (status === "published") {
-        const { data: video, error: lookupError } = await db
+        const { data: video, error: lookupError } = await adminDb
           .from("creator_videos")
           .select("id, channel_id, scan_status")
           .eq("id", id)
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ error: "Video wajib lolos safety scan sebelum dipublikasikan. Jalankan scan ulang atau tinjau hasil pemindaian." }, { status: 409 });
         }
 
-        const { data: channel, error: channelError } = await db
+        const { data: channel, error: channelError } = await adminDb
           .from("creator_channels")
           .select("status")
           .eq("id", video.channel_id)
@@ -84,7 +84,7 @@ export async function POST(request: Request) {
         }
       }
 
-      const { error } = await db
+      const { error } = await adminDb
         .from("creator_videos")
         .update({
           status,
