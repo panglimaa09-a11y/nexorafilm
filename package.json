@@ -25,5 +25,9 @@
     "@types/react-dom": "latest",
     "tailwindcss": "latest",
     "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "ffmpeg-static": true,
+    "sharp": true
   }
 }
