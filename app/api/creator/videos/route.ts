@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     const adminDb = createAdminClient();
     const { data: signed } = await adminDb.storage.from("creator-videos").createSignedUrl(storagePath, 600);
     const scan = signed?.signedUrl
-      ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: data.id, title, description })
+      ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: data.id, title, description, storagePath })
       : { decision: "unavailable" as const, provider: "storage", result: { signed_url_failed: true }, note: "Video ditahan karena file tidak dapat diperiksa." };
     // Gemini-approved Shorts publish automatically. Anything uncertain or unavailable stays in review.
     // Other moderation providers keep the existing manual-review flow.
