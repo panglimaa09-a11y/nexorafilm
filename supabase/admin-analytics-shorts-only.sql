@@ -47,7 +47,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 declare
   result jsonb;
 begin
@@ -85,7 +85,7 @@ begin
 
   return result;
 end;
-$;
+$$;
 
 revoke all on function public.admin_revenue_analytics() from public;
 revoke all on function public.admin_revenue_analytics() from anon;
@@ -100,7 +100,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 begin
   if auth.uid() is not null and not public.is_admin()
      and new.status is distinct from old.status then
@@ -108,7 +108,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists creator_channel_status_guard on public.creator_channels;
 create trigger creator_channel_status_guard
@@ -120,7 +120,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = public, pg_temp
-as $
+as $$
 begin
   if auth.uid() is not null and not public.is_admin() then
     if new.owner_id is distinct from old.owner_id
@@ -134,7 +134,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists creator_video_status_guard on public.creator_videos;
 create trigger creator_video_status_guard
