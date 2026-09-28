@@ -18,6 +18,7 @@ export default async function CreatorWatchPage({
     .eq("id", id)
     .eq("status", "published")
     .eq("video_type", "short")
+    .eq("scan_status", "safe")
     .maybeSingle();
 
   if (error) {
