@@ -221,9 +221,10 @@ import path from "node:path";
 import ffmpegPath from "ffmpeg-static";
 
 async function runFfmpeg(args: string[]): Promise<{ stderr: string; failed: boolean }> {
-  if (!ffmpegPath) throw new Error("FFmpeg binary is unavailable in this deployment.");
+  const binaryPath = ffmpegPath;
+  if (!binaryPath) throw new Error("FFmpeg binary is unavailable in this deployment.");
   return new Promise((resolve) => {
-    execFile(ffmpegPath, args, { timeout: 12_000, maxBuffer: 2 * 1024 * 1024 }, (error, _stdout, stderr) => {
+    execFile(binaryPath, args, { timeout: 12_000, maxBuffer: 2 * 1024 * 1024 }, (error, _stdout, stderr) => {
       resolve({ stderr: String(stderr ?? ""), failed: Boolean(error) });
     });
   });
