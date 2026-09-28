@@ -62,12 +62,15 @@ export async function POST(request: Request) {
       if (status === "published") {
         const { data: video, error: lookupError } = await db
           .from("creator_videos")
-          .select("id, channel_id")
+          .select("id, channel_id, scan_status")
           .eq("id", id)
           .maybeSingle();
 
         if (lookupError || !video) {
           return NextResponse.json({ error: "Video tidak ditemukan." }, { status: 404 });
+        }
+        if (video.scan_status !== "safe") {
+          return NextResponse.json({ error: "Video wajib lolos safety scan sebelum dipublikasikan. Jalankan scan ulang atau tinjau hasil pemindaian." }, { status: 409 });
         }
 
         const { data: channel, error: channelError } = await db
