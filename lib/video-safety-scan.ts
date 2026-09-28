@@ -279,7 +279,7 @@ async function scanWithAtria(input: {
 
     const frameCount = 6;
     const timestamps = Array.from({ length: frameCount }, (_, index) =>
-      frameCount === 1 ? 0 : Math.min(Math.max(0, duration - 0.2), (duration * index) / (frameCount - 1)),
+      Math.min(Math.max(0, duration - 0.2), (duration * index) / (frameCount - 1)),
     );
     const frames: Array<{ type: "image_url"; image_url: { url: string; detail: "low" | "high" } }> = [];
     for (let index = 0; index < timestamps.length; index++) {
