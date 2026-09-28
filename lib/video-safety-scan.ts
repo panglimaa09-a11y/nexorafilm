@@ -43,6 +43,7 @@ async function scanWithGemini(input: {
   videoId: string;
   title: string;
   description: string | null;
+  storagePath?: string;
   apiKey: string;
 }): Promise<ScanResult> {
   const provider = "Google Gemini video moderation";
@@ -59,7 +60,12 @@ async function scanWithGemini(input: {
     }
 
     const contentLength = Number(source.headers.get("content-length") ?? "0");
-    const mimeType = (source.headers.get("content-type") ?? "video/mp4").split(";")[0].trim().toLowerCase();
+    const responseMimeType = (source.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    const extension = (input.storagePath ?? "").split(".").pop()?.toLowerCase() ?? "";
+    const extensionMimeType: Record<string, string> = { mp4: "video/mp4", m4v: "video/mp4", mov: "video/quicktime", webm: "video/webm", mpeg: "video/mpeg", mpg: "video/mpeg", avi: "video/x-msvideo", wmv: "video/x-ms-wmv", "3gp": "video/3gpp" };
+    const mimeType = !responseMimeType || responseMimeType === "application/octet-stream" || responseMimeType === "binary/octet-stream"
+      ? (extensionMimeType[extension] ?? "video/mp4")
+      : responseMimeType;
     const supportedTypes = new Set(["video/mp4", "video/mpeg", "video/mov", "video/quicktime", "video/webm", "video/avi", "video/x-msvideo", "video/x-ms-wmv", "video/3gpp"]);
     if (!supportedTypes.has(mimeType)) {
       return { decision: "review", provider, result: { stage: "mime-type", mime_type: mimeType }, note: "Format video tidak dikenali untuk pemindaian otomatis; perlu review admin." };
@@ -84,7 +90,7 @@ async function scanWithGemini(input: {
     });
     if (!start.ok) {
       await source.body.cancel().catch(() => undefined);
-      return { decision: "unavailable", provider, result: { stage: "file_upload_start", http_status: start.status }, note: "Gemini tidak dapat memulai pemindaian; video tetap ditahan." };
+      return { decision: "unavailable", provider, result: { stage: "file_upload_start", http_status: start.status }, note: `Gemini menolak memulai unggahan (HTTP ${start.status}); periksa API key dan kuota. Video tetap ditahan.` };
     }
 
     const uploadUrl = start.headers.get("x-goog-upload-url");
@@ -108,7 +114,7 @@ async function scanWithGemini(input: {
     } as RequestInit & { duplex: "half" });
 
     if (!upload.ok) {
-      return { decision: "unavailable", provider, result: { stage: "file_upload", http_status: upload.status }, note: "Unggah ke Gemini gagal; video tetap ditahan." };
+      return { decision: "unavailable", provider, result: { stage: "file_upload", http_status: upload.status }, note: `Unggah video ke Gemini gagal (HTTP ${upload.status}); video tetap ditahan.` };
     }
 
     const uploadPayload = await upload.json() as { file?: { name?: string; uri?: string; mimeType?: string; mime_type?: string; state?: string } };
@@ -164,7 +170,7 @@ async function scanWithGemini(input: {
     }, 25_000);
 
     if (!analysis.ok) {
-      return { decision: "unavailable", provider, result: { stage: "analysis", http_status: analysis.status }, note: "Analisis Gemini gagal; video tetap ditahan untuk review admin." };
+      return { decision: "unavailable", provider, result: { stage: "analysis", http_status: analysis.status }, note: `Analisis Gemini gagal (HTTP ${analysis.status}); periksa API key, izin model, dan kuota. Video tetap ditahan untuk review admin.` };
     }
 
     const analysisPayload = await analysis.json() as {
@@ -212,6 +218,7 @@ export async function scanCreatorVideo(input: {
   videoId: string;
   title: string;
   description: string | null;
+  storagePath?: string;
 }): Promise<ScanResult> {
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
   if (geminiApiKey) {
