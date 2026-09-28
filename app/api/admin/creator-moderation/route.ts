@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
 import { createAdminClient } from "@/lib/supabase-admin";
 
@@ -103,6 +103,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Jenis objek tidak valid." }, { status: 400 });
   } catch (error) {
     console.error("Creator moderation API error:", error);
-    return NextResponse.json({ error: "Permintaan tidak dapat diproses." }, { status: 500 });
+    if (error instanceof Error && error.message.includes("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY")) {
+      return NextResponse.json(
+        { error: "Konfigurasi Supabase server belum lengkap. Pastikan NEXT_PUBLIC_SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY tersedia di Environment Variables Vercel untuk Production." },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json({ error: "Permintaan tidak dapat diproses. Periksa Runtime Logs Vercel untuk detail server." }, { status: 500 });
   }
 }
