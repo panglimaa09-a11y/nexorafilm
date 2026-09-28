@@ -18,7 +18,13 @@ create index if not exists creator_follows_follower_idx
 alter table public.creator_follows enable row level security;
 drop policy if exists "creator_follows_read_signed_in" on public.creator_follows;
 create policy "creator_follows_read_signed_in"
-  on public.creator_follows for select to authenticated using (true);
+  on public.creator_follows for select to authenticated
+  using (
+    follower_id = (select auth.uid())
+    or channel_id in (
+      select id from public.creator_channels where user_id = (select auth.uid())
+    )
+  );
 drop policy if exists "creator_follows_follow_self" on public.creator_follows;
 create policy "creator_follows_follow_self"
   on public.creator_follows for insert to authenticated
