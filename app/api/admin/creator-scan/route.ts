@@ -31,11 +31,11 @@ export async function POST(request: Request) {
       : { decision: "unavailable" as const, provider: "storage", result: { signed_url_failed: true }, note: "File tidak dapat dibaca untuk dipindai." };
 
     let status = scan.decision === "blocked" ? "rejected" : scan.decision === "safe" ? video.status : "review";
-    // On a rescan, auto-publish only a still-reviewing Short that Gemini marked safe,
+    // On a rescan, auto-publish only a still-reviewing Short that Atria/Gemini marked safe,
     // and only when its creator channel is active. Never undo an admin rejection.
     if (
       scan.decision === "safe" &&
-      scan.provider === "Google Gemini video moderation" &&
+      ["Atria-Dawn-Preview", "Google Gemini video moderation"].includes(scan.provider) &&
       video.video_type === "short" &&
       video.status === "review"
     ) {
