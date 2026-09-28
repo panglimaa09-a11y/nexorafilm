@@ -1,5 +1,7 @@
 ﻿import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-admin";
+import { scanCreatorVideo } from "@/lib/video-safety-scan";
 
 export const runtime = "nodejs";
 
@@ -74,7 +76,8 @@ export async function POST(req: Request) {
         storage_path: storagePath,
         thumbnail_path: thumbnailPath,
         video_type: "short",
-        status: "review"
+        status: "review",
+        scan_status: "pending"
       })
       .select("id,title,description,status,created_at,thumbnail_path")
       .single();
@@ -83,7 +86,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Metadata gagal disimpan. Periksa migrasi dan aturan akses database." }, { status: 400 });
     }
 
-    return NextResponse.json({ video: data }, { status: 201 });
+    // Fail closed: a missing/unavailable scanner never permits publication.
+    const adminDb = createAdminClient();
+    const { data: signed } = await adminDb.storage.from("creator-videos").createSignedUrl(storagePath, 600);
+    const scan = signed?.signedUrl
+      ? await scanCreatorVideo({ videoUrl: signed.signedUrl, videoId: data.id, title, description })
+      : { decision: "unavailable" as const, provider: "storage", result: { signed_url_failed: true }, note: "Video ditahan karena file tidak dapat diperiksa." };
+    const nextStatus = scan.decision === "blocked" ? "rejected" : "review";
+    const { data: updated } = await adminDb.from("creator_videos").update({
+      scan_status: scan.decision,
+      scan_provider: scan.provider,
+      scan_result: scan.result,
+      scanned_at: scan.decision === "unavailable" ? null : new Date().toISOString(),
+      status: nextStatus,
+      moderation_note: scan.note,
+      updated_at: new Date().toISOString(),
+    }).eq("id", data.id).select("id,title,description,status,created_at,thumbnail_path,scan_status").single();
+
+    const video = updated ?? { ...data, scan_status: scan.decision };
+    return NextResponse.json({ video, scan: { status: scan.decision, note: scan.note } }, { status: 201 });
   } catch {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }
