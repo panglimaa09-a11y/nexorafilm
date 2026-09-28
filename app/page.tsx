@@ -38,7 +38,6 @@ export default async function Home() {
         .select('id,title,description,channel_id,created_at,thumbnail_path')
         .eq('status', 'published')
         .eq('video_type', 'short')
-        .eq('scan_status', 'safe')
         .in('channel_id', channelIds)
         .order('created_at', { ascending: false })
         .limit(12);
