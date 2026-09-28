@@ -12,6 +12,12 @@ update public.creator_videos
 set video_type = 'short'
 where video_type is null or video_type <> 'short';
 
+update public.creator_videos set view_count = 0 where view_count is null;
+alter table public.creator_videos alter column video_type set default 'short';
+alter table public.creator_videos alter column video_type set not null;
+alter table public.creator_videos alter column view_count set default 0;
+alter table public.creator_videos alter column view_count set not null;
+
 alter table public.creator_videos
   drop constraint if exists creator_videos_video_type_check;
 alter table public.creator_videos
