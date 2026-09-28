@@ -27,6 +27,7 @@ export default async function ShortsPage() {
     .select("id,title,description,view_count,channel_id,created_at")
     .eq("status", "published")
     .eq("video_type", "short")
+    .eq("scan_status", "safe")
     .order("created_at", { ascending: false })
     .limit(30);
 
