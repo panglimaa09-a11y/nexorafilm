@@ -33,4 +33,57 @@ comment on column public.creator_videos.video_type is
 comment on column public.creator_videos.view_count is
   'Count of confirmed playback requests; not a monetization or payout ledger.';
 
+
+-- Exact aggregates are calculated in PostgreSQL so analytics are not truncated
+-- by the REST API row limit. Only authenticated admins may call this function.
+create or replace function public.admin_revenue_analytics()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $
+declare
+  result jsonb;
+begin
+  if not public.is_admin() then
+    raise exception 'Admin access required' using errcode = '42501';
+  end if;
+
+  select jsonb_build_object(
+    'total_revenue', coalesce(sum(p.amount) filter (where p.status = 'paid'), 0),
+    'paid_count', count(*) filter (where p.status = 'paid'),
+    'pending_count', count(*) filter (where p.status = 'pending'),
+    'failed_count', count(*) filter (where lower(p.status) in ('cancelled','canceled','failed','expired')),
+    'total_count', count(*),
+    'monthly', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'month', to_char(m.month_start, 'YYYY-MM'),
+          'revenue', m.revenue,
+          'count', m.paid_count
+        ) order by m.month_start
+      )
+      from (
+        select
+          date_trunc('month', created_at) as month_start,
+          coalesce(sum(amount) filter (where status = 'paid'), 0) as revenue,
+          count(*) filter (where status = 'paid') as paid_count
+        from public.payments
+        where created_at >= date_trunc('month', now()) - interval '5 months'
+        group by date_trunc('month', created_at)
+      ) m
+    ), '[]'::jsonb)
+  )
+  into result
+  from public.payments p;
+
+  return result;
+end;
+$;
+
+revoke all on function public.admin_revenue_analytics() from public;
+revoke all on function public.admin_revenue_analytics() from anon;
+grant execute on function public.admin_revenue_analytics() to authenticated;
+
+
 commit;
