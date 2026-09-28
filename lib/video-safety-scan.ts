@@ -213,6 +213,145 @@ async function scanWithGemini(input: {
   }
 }
 
+
+import { execFile } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import ffmpegPath from "ffmpeg-static";
+
+async function runFfmpeg(args: string[]): Promise<{ stderr: string; failed: boolean }> {
+  if (!ffmpegPath) throw new Error("FFmpeg binary is unavailable in this deployment.");
+  return new Promise((resolve) => {
+    execFile(ffmpegPath, args, { timeout: 12_000, maxBuffer: 2 * 1024 * 1024 }, (error, _stdout, stderr) => {
+      resolve({ stderr: String(stderr ?? ""), failed: Boolean(error) });
+    });
+  });
+}
+
+async function scanWithAtria(input: {
+  videoUrl: string;
+  videoId: string;
+  title: string;
+  description: string | null;
+  apiKey: string;
+}): Promise<ScanResult> {
+  const provider = "Atria-Dawn-Preview";
+  let workDir = "";
+  try {
+    const source = await fetch(input.videoUrl, { signal: AbortSignal.timeout(25_000), cache: "no-store" });
+    if (!source.ok || !source.body) {
+      return { decision: "unavailable", provider, result: { stage: "download", http_status: source.status }, note: `Video gagal diambil untuk scan (HTTP ${source.status}); tetap ditahan.` };
+    }
+    const declaredSize = Number(source.headers.get("content-length") ?? "0");
+    const maxBytes = 100 * 1024 * 1024;
+    if (declaredSize > maxBytes) {
+      await source.body.cancel().catch(() => undefined);
+      return { decision: "review", provider, result: { stage: "size_limit", max_bytes: maxBytes, bytes: declaredSize }, note: "Video lebih besar dari batas scan otomatis 100 MB; perlu review admin." };
+    }
+    const reader = source.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return { decision: "review", provider, result: { stage: "size_limit", max_bytes: maxBytes }, note: "Video lebih besar dari batas scan otomatis 100 MB; perlu review admin." };
+      }
+      chunks.push(value);
+    }
+    if (!total) return { decision: "unavailable", provider, result: { stage: "download", reason: "empty_video" }, note: "File video kosong; tetap ditahan." };
+
+    workDir = await mkdtemp(path.join(os.tmpdir(), "nexorafilm-atria-"));
+    const videoPath = path.join(workDir, "source-video");
+    await writeFile(videoPath, Buffer.concat(chunks.map((chunk) => Buffer.from(chunk))));
+    const probe = await runFfmpeg(["-hide_banner", "-i", videoPath]);
+    const durationMatch = probe.stderr.match(/Duration:\s*(\d+):(\d+):([\d.]+)/);
+    const duration = durationMatch
+      ? Number(durationMatch[1]) * 3600 + Number(durationMatch[2]) * 60 + Number(durationMatch[3])
+      : 0;
+    if (!duration || !Number.isFinite(duration)) {
+      return { decision: "review", provider, result: { stage: "frame_extraction", reason: "duration_unavailable" }, note: "Durasi video tidak dapat dibaca; perlu review admin." };
+    }
+
+    const frameCount = 6;
+    const timestamps = Array.from({ length: frameCount }, (_, index) =>
+      frameCount === 1 ? 0 : Math.min(Math.max(0, duration - 0.2), (duration * index) / (frameCount - 1)),
+    );
+    const frames: Array<{ type: "image_url"; image_url: { url: string; detail: "low" | "high" } }> = [];
+    for (let index = 0; index < timestamps.length; index++) {
+      const framePath = path.join(workDir, `frame-${index}.jpg`);
+      const extracted = await runFfmpeg([
+        "-hide_banner", "-loglevel", "error", "-ss", String(timestamps[index]),
+        "-i", videoPath, "-frames:v", "1", "-vf", "scale=768:-1",
+        "-q:v", "5", "-y", framePath,
+      ]);
+      if (extracted.failed) continue;
+      try {
+        const bytes = await readFile(framePath);
+        if (bytes.length) frames.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${bytes.toString("base64")}`, detail: "low" } });
+      } catch { /* Skip an unavailable sample; fail closed if all samples are missing. */ }
+    }
+    if (frames.length < 3) {
+      return { decision: "review", provider, result: { stage: "frame_extraction", frames: frames.length }, note: "Sampel frame video tidak cukup untuk penilaian AI; perlu review admin." };
+    }
+
+    const baseUrl = (process.env.ATRIA_BASE_URL?.trim() || "https://api.atria-asi.ai/v1").replace(/\/+$/, "");
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${input.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: process.env.ATRIA_MODEL?.trim() || "Atria-Dawn-Preview",
+        temperature: 0,
+        max_tokens: 700,
+        messages: [
+          { role: "system", content: "You are a cautious safety moderator. Review only the supplied sampled video frames and metadata. Never claim to have heard audio. Return only JSON: {decision:'safe'|'blocked'|'review',categories:string[],summary:string}. Use safe only when the visible sampled frames show no relevant violation; use blocked only for a clearly visible severe violation; use review for uncertainty, missing context, or anything that cannot be judged from sampled frames. Check sexual content/exploitation (especially involving minors), graphic violence, credible threats, self-harm encouragement, dangerous acts, hateful harassment, and clearly harmful illegal activity. Do not provide graphic descriptions." },
+          { role: "user", content: [
+            { type: "text", text: `Review these ${frames.length} frames sampled across the video duration (${Math.round(duration)} seconds). This is a partial visual sample, not full audio/video understanding. Title: ${input.title.slice(0, 150)}. Description: ${(input.description ?? "").slice(0, 1000)}. Return strict JSON with decision, categories, summary.` },
+            ...frames,
+          ] },
+        ],
+      }),
+      signal: AbortSignal.timeout(25_000),
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return { decision: "unavailable", provider, result: { stage: "analysis", http_status: response.status }, note: `Atria gagal menganalisis frame (HTTP ${response.status}); video tetap ditahan untuk review admin.` };
+    }
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const rawText = payload.choices?.[0]?.message?.content;
+    const parsed = typeof rawText === "string" ? parseJsonText(rawText) : null;
+    const rawDecision = String(parsed?.decision ?? "").toLowerCase();
+    const decision: VideoSafetyDecision =
+      rawDecision === "safe" ? "safe" :
+      rawDecision === "blocked" ? "blocked" : "review";
+    return {
+      decision,
+      provider,
+      result: {
+        decision,
+        categories: Array.isArray(parsed?.categories) ? parsed.categories.slice(0, 20) : [],
+        summary: typeof parsed?.summary === "string" ? parsed.summary.slice(0, 500) : "Hasil AI memerlukan pemeriksaan admin.",
+        model: process.env.ATRIA_MODEL?.trim() || "Atria-Dawn-Preview",
+        sampled_frames: frames.length,
+        sampled_duration_seconds: Math.round(duration),
+      },
+      note: decision === "safe"
+        ? "Atria tidak menemukan pelanggaran yang terlihat pada frame sampel. Pemeriksaan admin tetap disarankan."
+        : decision === "blocked"
+          ? "Atria menandai frame sampel sebagai pelanggaran yang jelas; publikasi diblokir."
+          : "Atria tidak dapat memastikan keamanan dari sampel frame; perlu review manual.",
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message.slice(0, 180) : "unknown";
+    return { decision: "unavailable", provider, result: { stage: "request", error: message }, note: "Scan Atria gagal atau timeout; video tetap ditahan untuk review admin." };
+  } finally {
+    if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export async function scanCreatorVideo(input: {
   videoUrl: string;
   videoId: string;
@@ -220,6 +359,11 @@ export async function scanCreatorVideo(input: {
   description: string | null;
   storagePath?: string;
 }): Promise<ScanResult> {
+  const atriaApiKey = process.env.ATRIA_API_KEY?.trim();
+  if (atriaApiKey) {
+    return scanWithAtria({ ...input, apiKey: atriaApiKey });
+  }
+
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
   if (geminiApiKey) {
     return scanWithGemini({ ...input, apiKey: geminiApiKey });
