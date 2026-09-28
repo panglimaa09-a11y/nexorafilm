@@ -151,21 +151,34 @@ Video hasil Auto Import disimpan di bucket **private**. Browser tidak mendapatka
 
 Ini lebih aman daripada menyimpan URL public video di halaman.
 
-## 8. Midtrans
+## 8. Pakasir API v2
 
-Sandbox:
+Checkout menggunakan payment link Pakasir. Pelanggan dapat memilih QRIS atau Virtual Account yang diaktifkan pada proyek Pakasir. Metode/bank yang tersedia bergantung pada konfigurasi akun Pakasir.
+
+Tambahkan ke `.env.local`:
 
 ```env
-MIDTRANS_IS_PRODUCTION=false
+PAKASIR_PROJECT_SLUG=
+PAKASIR_API_KEY=
+PAKASIR_PAYMENT_METHOD=payment_link
+NEXT_PUBLIC_APP_URL=https://DOMAIN-KAMU
 ```
 
-Webhook produksi harus menggunakan URL HTTPS publik:
+Ambil slug dan API key dari detail proyek Pakasir. Jangan gunakan prefix `NEXT_PUBLIC_` untuk API key Pakasir atau service-role key Supabase, dan jangan commit `.env.local`.
+
+Di pengaturan proyek Pakasir, isi webhook URL dengan URL HTTPS publik:
 
 ```text
 https://DOMAIN-KAMU/api/payment/webhook
 ```
 
-Untuk local development, gunakan tunnel HTTPS jika Midtrans perlu mengakses webhook lokal.
+Jangan gunakan localhost sebagai webhook produksi. Webhook server-side memeriksa order dan nominal, lalu memverifikasi status transaksi ke API Pakasir sebelum mengubah status pembayaran dan mengaktifkan langganan. Redirect browser bukan bukti pembayaran berhasil.
+
+Sebelum menerima pembayaran nyata, jalankan migrasi berikut pada Supabase SQL Editor dan pastikan berhasil:
+
+```text
+supabase/migrations/20260928_pakasir_subscription_activation.sql
+```
 
 ## 9. Catatan produksi
 
