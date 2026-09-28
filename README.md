@@ -199,3 +199,33 @@ Catatan: video yang diimport harus merupakan konten yang kamu miliki atau punya 
 ## Admin Agent
 
 Agent selalu meminta konfirmasi sebelum perubahan katalog.
+
+
+## Creator Studio: follows, analytics, safety scan
+
+Run these SQL files in Supabase SQL Editor in order, after the existing creator and Shorts migrations:
+
+1. `supabase/creator-studio.sql`
+2. `supabase/admin-analytics-shorts-only.sql`
+3. `supabase/creator-follow-analytics-safety.sql`
+
+Creator Studio community uploads are Shorts only. Public creator profiles support follow/unfollow. A signed-in creator can open `/creator/analytics` to see follower count, published Shorts, counted playback requests, scan states, and initial monetization eligibility targets. The targets shown are 1,000 followers and 10,000 counted playback requests; they are not a promise of revenue or payout. Payment/payout rails and final eligibility approval must be implemented separately.
+
+### Automated video safety scan
+
+Set these server-only environment variables in Vercel and local `.env.local`:
+
+```env
+VIDEO_MODERATION_API_URL=https://YOUR-VIDEO-SAFETY-SERVICE/scan
+VIDEO_MODERATION_API_KEY=YOUR_SERVER_SIDE_SECRET
+```
+
+The configured endpoint must accept a JSON POST with `video_url`, `video_id`, `title`, `description`, `task`, and `required_checks`, then return JSON such as:
+
+```json
+{ "decision": "safe" }
+```
+
+Allowed decisions are `safe`, `blocked`, and `review`. Any unknown response, timeout, HTTP error, or missing configuration fails closed: the video remains unpublished. The scanner must actually analyze the video bytes/frames/audio; checking only title/description is not sufficient. Use a trusted video-moderation provider and verify its contract before enabling it. Admins can run a scan again from the creator moderation queue. A passing automated scan is not a substitute for human moderation.
+
+Playback counts currently record requests to the signed playback route, not verified unique viewers. They can include repeat requests and must be fraud-filtered before being used to calculate actual earnings.
