@@ -2,6 +2,7 @@
 import Navbar from '@/components/Navbar';
 import MovieRow from '@/components/MovieRow';
 import { createClient } from '@/lib/supabase-server';
+import { createAdminClient } from '@/lib/supabase-admin';
 
 export default async function Home() {
   const db = await createClient();
@@ -17,6 +18,40 @@ export default async function Home() {
 
   if (error) {
     console.error('NEXORA FILM movies query error:', error.message);
+  }
+
+  // Creator uploads live in creator_videos, not the legacy movies table.
+  // Use the server-only service client so public visitors can see published items
+  // while the underlying Storage bucket remains private.
+  let creatorVideos: Array<{ id: string; title: string; description: string | null; channel_id: string; created_at: string; thumbnailUrl: string | null; channelName: string; handle: string }> = [];
+  try {
+    const admin = createAdminClient();
+    const { data: channels } = await admin
+      .from('creator_channels')
+      .select('id,name,handle')
+      .eq('status', 'active');
+    const channelMap = new Map((channels ?? []).map((channel: any) => [channel.id, channel]));
+    const channelIds = Array.from(channelMap.keys());
+    if (channelIds.length) {
+      const { data: published } = await admin
+        .from('creator_videos')
+        .select('id,title,description,channel_id,created_at,thumbnail_path')
+        .eq('status', 'published')
+        .in('channel_id', channelIds)
+        .order('created_at', { ascending: false })
+        .limit(12);
+      creatorVideos = await Promise.all((published ?? []).map(async (video: any) => {
+        let thumbnailUrl: string | null = null;
+        if (video.thumbnail_path) {
+          const { data: signed } = await admin.storage.from('creator-videos').createSignedUrl(video.thumbnail_path, 3600);
+          thumbnailUrl = signed?.signedUrl ?? null;
+        }
+        const channel: any = channelMap.get(video.channel_id);
+        return { id: video.id, title: video.title, description: video.description, channel_id: video.channel_id, created_at: video.created_at, thumbnailUrl, channelName: channel?.name ?? 'Kreator Nexora', handle: channel?.handle ?? '' };
+      }));
+    }
+  } catch (creatorCatalogError) {
+    console.error('NEXORA FILM creator catalog error:', creatorCatalogError);
   }
 
   const hero = movies[0] ?? null;
@@ -232,6 +267,36 @@ export default async function Home() {
                 Buka katalog
               </Link>
             </div>
+          )}
+        </section>
+
+        <section aria-labelledby="creator-videos-heading">
+          <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="mb-2 text-xs font-bold uppercase tracking-[.24em] text-red-400">Karya komunitas</p>
+              <h2 id="creator-videos-heading" className="text-2xl font-bold md:text-3xl">Video dari kreator</h2>
+              <p className="mt-2 text-sm text-zinc-400">Video yang sudah disetujui dan dipublikasikan akan muncul otomatis di sini.</p>
+            </div>
+            <Link href="/creators" className="text-sm font-semibold text-zinc-300 hover:text-white">Jelajahi kreator →</Link>
+          </div>
+          {creatorVideos.length ? (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {creatorVideos.map((video) => (
+                <Link key={video.id} href={`/creator-watch/${video.id}`} className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[.03] transition hover:-translate-y-1 hover:border-red-500/40 hover:bg-white/[.06]">
+                  <div className="relative aspect-video overflow-hidden bg-zinc-900">
+                    {video.thumbnailUrl ? <img src={video.thumbnailUrl} alt={`Thumbnail ${video.title}`} className="h-full w-full object-cover transition duration-300 group-hover:scale-105" /> : <div className="flex h-full items-center justify-center bg-gradient-to-br from-zinc-800 to-black text-4xl font-black text-red-500">N</div>}
+                    <span className="absolute bottom-3 right-3 rounded bg-black/80 px-2 py-1 text-[10px] font-bold tracking-wider">NEXORA FILM</span>
+                  </div>
+                  <div className="p-4">
+                    <h3 className="line-clamp-2 text-base font-bold">{video.title}</h3>
+                    <p className="mt-2 text-xs text-zinc-400">@{video.handle || 'kreator'} · {video.channelName}</p>
+                    {video.description && <p className="mt-2 line-clamp-2 text-sm leading-6 text-zinc-500">{video.description}</p>}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-white/10 p-7 text-sm text-zinc-500">Belum ada video kreator yang dipublikasikan. Video akan tampil otomatis setelah statusnya menjadi <code>published</code> dan channel aktif.</div>
           )}
         </section>
 
