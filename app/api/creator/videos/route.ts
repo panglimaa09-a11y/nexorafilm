@@ -16,6 +16,7 @@ export async function POST(req: Request) {
     const title = typeof body.title === "string" ? body.title.trim() : "";
     const description = typeof body.description === "string" ? body.description.trim().slice(0, 5000) : "";
     const storagePath = typeof body.storage_path === "string" ? body.storage_path : "";
+    const thumbnailPath = typeof body.thumbnail_path === "string" && body.thumbnail_path.trim() ? body.thumbnail_path.trim() : null;
 
     if (title.length < 2 || title.length > 150) {
       return NextResponse.json({ error: "Judul harus 2–150 karakter." }, { status: 400 });
@@ -32,12 +33,15 @@ export async function POST(req: Request) {
 
     const { data: channel, error: channelError } = await db
       .from("creator_channels")
-      .select("id")
+      .select("id,status")
       .eq("user_id", user.id)
       .maybeSingle();
 
     if (channelError || !channel) {
       return NextResponse.json({ error: "Buat channel terlebih dahulu." }, { status: 400 });
+    }
+    if (channel.status !== "active") {
+      return NextResponse.json({ error: "Channel harus disetujui admin sebelum mengunggah video." }, { status: 403 });
     }
 
     const { data: object } = await db.storage
@@ -49,6 +53,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "File video belum ditemukan di penyimpanan." }, { status: 400 });
     }
 
+    if (thumbnailPath) {
+      if (!thumbnailPath.startsWith(`${user.id}/thumbnails/`) || thumbnailPath.includes("..") || thumbnailPath.startsWith("/")) {
+        return NextResponse.json({ error: "Lokasi thumbnail tidak valid." }, { status: 400 });
+      }
+      const thumbName = thumbnailPath.slice(`${user.id}/thumbnails/`.length);
+      const { data: thumbs } = await db.storage.from("creator-videos").list(`${user.id}/thumbnails`, { search: thumbName, limit: 100 });
+      if (!thumbName || !thumbs?.some((item) => item.name === thumbName)) {
+        return NextResponse.json({ error: "Thumbnail belum ditemukan di penyimpanan." }, { status: 400 });
+      }
+    }
+
     const { data, error } = await db
       .from("creator_videos")
       .insert({
@@ -57,9 +72,10 @@ export async function POST(req: Request) {
         title,
         description,
         storage_path: storagePath,
+        thumbnail_path: thumbnailPath,
         status: "review"
       })
-      .select("id,title,description,status,created_at")
+      .select("id,title,description,status,created_at,thumbnail_path")
       .single();
 
     if (error) {
@@ -67,6 +83,47 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ video: data }, { status: 201 });
+  } catch {
+    return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
+  }
+}
+
+
+export async function PATCH(req: Request) {
+  try {
+    const db = await createClient();
+    const { data: { user } } = await db.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Silakan login terlebih dahulu." }, { status: 401 });
+
+    const body = await req.json();
+    const id = typeof body.id === "string" ? body.id.trim() : "";
+    const title = typeof body.title === "string" ? body.title.trim() : "";
+    const description = typeof body.description === "string" ? body.description.trim().slice(0, 5000) : "";
+    const thumbnailPath = typeof body.thumbnail_path === "string" && body.thumbnail_path.trim() ? body.thumbnail_path.trim() : null;
+
+    if (!id) return NextResponse.json({ error: "ID video wajib diisi." }, { status: 400 });
+    if (title.length < 2 || title.length > 150) return NextResponse.json({ error: "Judul harus 2–150 karakter." }, { status: 400 });
+
+    const { data: existing, error: findError } = await db.from("creator_videos")
+      .select("id,status,thumbnail_path").eq("id", id).eq("owner_id", user.id).maybeSingle();
+    if (findError || !existing) return NextResponse.json({ error: "Video tidak ditemukan atau bukan milik Anda." }, { status: 404 });
+
+    if (thumbnailPath) {
+      if (!thumbnailPath.startsWith(`${user.id}/thumbnails/`) || thumbnailPath.includes("..") || thumbnailPath.startsWith("/")) {
+        return NextResponse.json({ error: "Lokasi thumbnail tidak valid." }, { status: 400 });
+      }
+      const filename = thumbnailPath.slice(`${user.id}/thumbnails/`.length);
+      const { data: objects } = await db.storage.from("creator-videos").list(`${user.id}/thumbnails`, { search: filename, limit: 100 });
+      if (!filename || !objects?.some(item => item.name === filename)) return NextResponse.json({ error: "Thumbnail tidak ditemukan." }, { status: 400 });
+    }
+
+    const update: Record<string, unknown> = { title, description };
+    if (thumbnailPath) update.thumbnail_path = thumbnailPath;
+    const { data, error } = await db.from("creator_videos").update(update)
+      .eq("id", id).eq("owner_id", user.id)
+      .select("id,title,description,status,created_at,thumbnail_path").single();
+    if (error || !data) return NextResponse.json({ error: "Perubahan gagal disimpan." }, { status: 400 });
+    return NextResponse.json({ video: data });
   } catch {
     return NextResponse.json({ error: "Permintaan tidak valid." }, { status: 400 });
   }

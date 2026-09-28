@@ -20,7 +20,7 @@ export default async function CreatorStudioPage() {
       .eq("user_id", user.id)
       .maybeSingle(),
     db.from("creator_videos")
-      .select("id,title,description,status,created_at")
+      .select("id,title,description,status,created_at,thumbnail_path")
       .eq("owner_id", user.id)
       .order("created_at", { ascending: false })
       .limit(100)
