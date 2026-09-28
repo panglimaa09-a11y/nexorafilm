@@ -17,6 +17,7 @@ export default async function CreatorWatchPage({
     .select("id,title,description,storage_path,created_at,channel_id")
     .eq("id", id)
     .eq("status", "published")
+    .eq("video_type", "short")
     .maybeSingle();
 
   if (error) {

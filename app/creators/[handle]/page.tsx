@@ -27,9 +27,10 @@ export default async function CreatorProfilePage({
 
   const { data: rawVideos, error: videoError } = await admin
     .from("creator_videos")
-    .select("id,title,description,status,created_at,thumbnail_path")
+    .select("id,title,description,status,created_at,thumbnail_path,video_type")
     .eq("channel_id", channel.id)
     .eq("status", "published")
+    .eq("video_type", "short")
     .order("created_at", { ascending: false });
 
   if (videoError) {

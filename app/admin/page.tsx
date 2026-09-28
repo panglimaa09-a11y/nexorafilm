@@ -8,7 +8,8 @@ const modules = [
   { title: "Manajemen Film", desc: "Kelola katalog, metadata, dan status publikasi.", href: "/admin/movies", icon: "🎬" },
   { title: "Tambah Film", desc: "Masukkan judul baru ke katalog.", href: "/admin/movies/new", icon: "➕" },
   { title: "Impor Media", desc: "Kelola proses impor media yang tersedia.", href: "/admin/import", icon: "📥" },
-  { title: "Creator Studio", desc: "Moderasi channel dan video kreator.", href: "/admin/creators", icon: "🎥" },
+  { title: "Creator Studio", desc: "Moderasi channel dan Shorts kreator.", href: "/admin/creators", icon: "🎥" },
+  { title: "Pendapatan & Analytics", desc: "Pantau pembayaran terverifikasi, tren pendapatan, dan transaksi terbaru.", href: "/admin/analytics", icon: "📊" },
   { title: "AI Agent", desc: "Buka agen admin untuk membantu operasi katalog.", href: "/admin/agent", icon: "🤖" },
 ];
 

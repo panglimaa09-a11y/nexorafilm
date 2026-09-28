@@ -37,6 +37,7 @@ export default async function Home() {
         .from('creator_videos')
         .select('id,title,description,channel_id,created_at,thumbnail_path')
         .eq('status', 'published')
+        .eq('video_type', 'short')
         .in('channel_id', channelIds)
         .order('created_at', { ascending: false })
         .limit(12);
