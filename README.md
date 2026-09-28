@@ -221,7 +221,7 @@ GEMINI_API_KEY=your_google_ai_studio_api_key
 
 The backend uses Gemini video understanding to inspect the uploaded video's actual frames/audio via Gemini Files API, then classifies it as `safe`, `blocked`, or `review`. The key stays on the server. It uses `gemini-2.5-flash` by default in the scanner. Confirm model availability and the current free-tier quotas/pricing for your Google AI Studio account.
 
-The scan is fail-closed: upload errors, unsupported media, timeouts, invalid responses, and uncertain results do not permit publication. A passing AI scan is not final approval; the video remains in the admin review queue. AI moderation can miss violations and should not be treated as a guarantee.
+For Shorts, a `safe` result specifically from Gemini automatically publishes the video when its creator channel is active. `blocked` results are rejected; `review`, `unavailable`, timeouts, invalid responses, and other uncertain results stay unpublished for admin review. Other moderation providers continue to use manual review. A passing AI scan is not a guarantee: AI moderation can miss violations, so keep reporting and admin takedown tools available.
 
 Gemini Files API uploads are deleted after the scan where possible. Video scanning runs synchronously during upload, so long videos or slow processing can time out in serverless hosting; such videos remain unpublished and require manual review. For production-scale uploads, use an asynchronous queue/worker.
 
