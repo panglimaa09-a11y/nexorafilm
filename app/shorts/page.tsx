@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import ShortsScrollFeed, { type ShortsFeedItem } from "@/components/ShortsScrollFeed";
-import { createClient } from "@/lib/supabase-server";
+import { createAdminClient } from "@/lib/supabase-admin";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,8 @@ type CreatorChannel = {
 };
 
 export default async function ShortsPage() {
-  const db = await createClient();
+  // Public feed must read published videos server-side; anon/session RLS can hide approved videos.
+  const db = createAdminClient();
   const { data, error } = await db
     .from("creator_videos")
     .select("id,title,description,view_count,channel_id,created_at")
@@ -33,15 +34,17 @@ export default async function ShortsPage() {
   const videos = (data ?? []) as ShortVideo[];
   const channelIds = [...new Set(videos.map((video) => video.channel_id))];
   const { data: channelData } = channelIds.length
-    ? await db.from("creator_channels").select("id,name,handle").in("id", channelIds)
+    ? await db.from("creator_channels").select("id,name,handle").eq("status", "active").in("id", channelIds)
     : { data: [] as CreatorChannel[] };
 
   const channels = (channelData ?? []) as CreatorChannel[];
   const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
-  const feedItems: ShortsFeedItem[] = videos.map((video) => ({
-    ...video,
-    channel: channelMap.get(video.channel_id) ?? null,
-  }));
+  const feedItems: ShortsFeedItem[] = videos
+    .filter((video) => channelMap.has(video.channel_id))
+    .map((video) => ({
+      ...video,
+      channel: channelMap.get(video.channel_id) ?? null,
+    }));
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
