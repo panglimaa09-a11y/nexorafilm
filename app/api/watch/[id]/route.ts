@@ -10,7 +10,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { data: { user } } = await db.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Login diperlukan' }, { status: 401 });
 
-  const { data: movie } = await db.from('movies').select('id,title,video_url,video_path').eq('id', id).eq('published', true).maybeSingle();
+  const { data: movie } = await db.from('movies').select('id,title,video_url').eq('id', id).eq('published', true).maybeSingle();
   if (!movie) return NextResponse.json({ error: 'Film tidak ditemukan' }, { status: 404 });
 
   const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).maybeSingle();
