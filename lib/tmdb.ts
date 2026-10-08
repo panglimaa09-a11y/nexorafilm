@@ -53,7 +53,9 @@ export interface TmdbVideo {
 
 export async function getTmdbTrailer(id: string): Promise<TmdbVideo | null> {
   try {
-    const data = await tmdbGet(`/movie/${id}/videos`);
+    const res = await fetch(`${TMDB_BASE}/movie/${id}/videos?api_key=${TMDB_API_KEY}`, { next: { revalidate: 3600 } });
+    if (!res.ok) return null;
+    const data = await res.json();
     const vids: TmdbVideo[] = (data.results ?? []).filter((v: TmdbVideo) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'));
     if (!vids.length) return null;
     vids.sort((a, b) => Number(b.official) - Number(a.official));
