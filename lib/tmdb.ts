@@ -41,3 +41,24 @@ export async function getTmdb(id: string): Promise<TmdbMovie | null> {
     return null;
   }
 }
+
+export interface TmdbVideo {
+  id: string;
+  key: string;
+  site: string;
+  type: string;
+  official: boolean;
+  name: string;
+}
+
+export async function getTmdbTrailer(id: string): Promise<TmdbVideo | null> {
+  try {
+    const data = await tmdbGet(`/movie/${id}/videos`);
+    const vids: TmdbVideo[] = (data.results ?? []).filter((v: TmdbVideo) => v.site === 'YouTube' && (v.type === 'Trailer' || v.type === 'Teaser'));
+    if (!vids.length) return null;
+    vids.sort((a, b) => Number(b.official) - Number(a.official));
+    return vids[0];
+  } catch {
+    return null;
+  }
+}
