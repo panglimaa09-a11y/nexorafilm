@@ -13,10 +13,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   const { data: movie } = await db.from('movies').select('id,title,video_url,video_path').eq('id', id).eq('published', true).maybeSingle();
   if (!movie) return NextResponse.json({ error: 'Film tidak ditemukan' }, { status: 404 });
 
-  const { data: sub } = await db.from('subscriptions').select('plan_id').eq('user_id', user.id).eq('status', 'active').gt('current_period_end', new Date().toISOString()).maybeSingle();
-  if (!sub) return NextResponse.json({ error: 'Subscription aktif diperlukan' }, { status: 403 });
-  const { data: allowed } = await db.from('movie_plans').select('movie_id').eq('movie_id', id).eq('plan_id', sub.plan_id).maybeSingle();
-  if (!allowed) return NextResponse.json({ error: 'Paket kamu tidak memiliki akses ke film ini' }, { status: 403 });
+  const { data: profile } = await db.from('profiles').select('role').eq('id', user.id).maybeSingle();
+  if (profile?.role !== 'admin') {
+    const { data: sub } = await db.from('subscriptions').select('plan_id').eq('user_id', user.id).eq('status', 'active').gt('current_period_end', new Date().toISOString()).maybeSingle();
+    if (!sub) return NextResponse.json({ error: 'Subscription aktif diperlukan' }, { status: 403 });
+    const { data: allowed } = await db.from('movie_plans').select('movie_id').eq('movie_id', id).eq('plan_id', sub.plan_id).maybeSingle();
+    if (!allowed) return NextResponse.json({ error: 'Paket kamu tidak memiliki akses ke film ini' }, { status: 403 });
+  }
 
   if (movie.video_path) {
     const admin = createAdminClient();
