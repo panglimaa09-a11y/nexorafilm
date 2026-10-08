@@ -1,5 +1,11 @@
 import {createClient} from "./supabase-server";
+export async function isAdmin(userId:string){
+ const supabase=await createClient();
+ const {data}=await supabase.from("profiles").select("role").eq("id",userId).maybeSingle();
+ return data?.role==="admin";
+}
 export async function hasActiveSubscription(userId:string, movieId?:string){
+ if(await isAdmin(userId))return true;
  const supabase=await createClient();
  const {data}=await supabase.from("subscriptions").select("*, plans(*)").eq("user_id",userId).eq("status","active").gt("current_period_end",new Date().toISOString()).maybeSingle();
  if(!data)return false;
