@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       sandbox: true,
-      subscription_activated: false,
+      tokens_credited: false,
     });
   }
 
@@ -220,15 +220,16 @@ export async function POST(request: Request) {
   }
 
   if (nextStatus === 'paid') {
-    const { error: activationError } = await db.rpc(
-      'activate_pakasir_subscription',
+    // Full token (16 Okt 2026): pembayaran sukses = kredit token, bukan langganan.
+    const { error: creditError } = await db.rpc(
+      'credit_tokens_for_payment',
       { p_payment_id: payment.id }
     );
 
-    if (activationError) {
-      console.error('Pakasir subscription activation failed:', activationError.message);
+    if (creditError) {
+      console.error('Pakasir token credit failed:', creditError.message);
       return NextResponse.json(
-        { error: 'subscription activation failed' },
+        { error: 'token credit failed' },
         { status: 500 }
       );
     }
