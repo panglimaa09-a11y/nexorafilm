@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 
@@ -44,13 +44,12 @@ export default async function AdminDashboardPage() {
   if (profile?.role !== "admin") redirect("/");
 
   const [
-    users, movies, plans, subscriptions, payments,
+    users, movies, tokenHolders, payments,
     channels, pendingChannels, videos, reviewVideos
   ] = await Promise.all([
     countRows(db, "profiles"),
     countRows(db, "movies"),
-    countRows(db, "plans"),
-    countRows(db, "subscriptions"),
+    countRows(db, "token_balances"),
     countRows(db, "payments"),
     countRows(db, "creator_channels"),
     countRows(db, "creator_channels", "status", "pending"),
@@ -58,11 +57,18 @@ export default async function AdminDashboardPage() {
     countRows(db, "creator_videos", "status", "review"),
   ]);
 
+  // Total token beredar (dari seluruh saldo user).
+  let tokensInCirculation: number | null = null;
+  {
+    const { data, error } = await db.from("token_balances").select("balance");
+    if (!error && data) tokensInCirculation = data.reduce((n: number, r: any) => n + (r.balance || 0), 0);
+  }
+
   const stats = [
     { label: "Pengguna", value: users, icon: "👥" },
     { label: "Film dalam katalog", value: movies, icon: "🎬" },
-    { label: "Paket langganan", value: plans, icon: "💳" },
-    { label: "Langganan tercatat", value: subscriptions, icon: "📅" },
+    { label: "Pemegang token", value: tokenHolders, icon: "🎟" },
+    { label: "Token beredar", value: tokensInCirculation, icon: "🪙" },
     { label: "Catatan pembayaran", value: payments, icon: "🧾" },
     { label: "Channel kreator", value: channels, icon: "📺" },
     { label: "Channel menunggu", value: pendingChannels, icon: "⏳" },
@@ -123,7 +129,7 @@ export default async function AdminDashboardPage() {
 
         <section>
           <h2 className="mb-4 text-xl font-bold">Modul administrasi</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-3">
             {modules.map((item) => (
               <Link key={item.href} href={item.href}
                 className="group rounded-2xl border border-white/10 bg-white/[0.035] p-5 transition hover:border-cyan-400/50 hover:bg-white/[0.07]">
