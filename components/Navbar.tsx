@@ -10,7 +10,7 @@ export default async function Navbar() {
     <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-10">
       <Link href="/" className="text-xl font-black">NEXORA <span className="text-red-500">FILM</span></Link>
       <nav className="hidden items-center gap-5 text-sm text-zinc-300 md:flex">
-        <Link href="/">Beranda</Link><Link href="/movies">Film</Link><Link href="/search">Cari</Link><Link href="/plans">Paket</Link>
+        <Link href="/">Beranda</Link><Link href="/movies">Film</Link><Link href="/search">Cari</Link><Link href="/tokens">🎟 Token</Link>
         {user && <><Link href="/my-list">Daftar Saya</Link><Link href="/history">Riwayat</Link></>}
         {role === 'admin' && <Link href="/admin" className="text-red-400">Admin</Link>}
       </nav>
