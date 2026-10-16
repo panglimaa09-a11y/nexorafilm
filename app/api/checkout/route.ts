@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { createAdminClient } from '@/lib/supabase-admin';
 import { NextResponse } from 'next/server';
+import { TOKEN_PRICE, TOKEN_PACKAGES } from '@/lib/entitlements';
 
 export const runtime = 'nodejs';
 
@@ -14,18 +15,12 @@ export async function POST(request: Request) {
       return NextResponse.redirect(new URL('/login', request.url), 303);
     }
 
+    // Full token (16 Okt 2026): beli paket token, bukan paket langganan.
     const form = await request.formData();
-    const planId = String(form.get('plan_id') || '').trim();
+    const tokenQty = Number(String(form.get('token_qty') || '').trim());
 
-    const { data: plan, error: planError } = await db
-      .from('plans')
-      .select('id,name,price_monthly')
-      .eq('id', planId)
-      .eq('active', true)
-      .maybeSingle();
-
-    if (planError || !plan) {
-      return NextResponse.redirect(new URL('/plans?error=plan', request.url), 303);
+    if (!TOKEN_PACKAGES.includes(tokenQty)) {
+      return NextResponse.redirect(new URL('/tokens?error=package', request.url), 303);
     }
 
     const slug = process.env.PAKASIR_PROJECT_SLUG?.trim();
@@ -39,14 +34,14 @@ export async function POST(request: Request) {
       );
     }
 
-    const amount = Number(plan.price_monthly);
+    const amount = tokenQty * TOKEN_PRICE;
     if (!Number.isSafeInteger(amount) || amount < 500 || amount > 50000000) {
       return NextResponse.redirect(
-        new URL('/checkout?error=invalid_plan_amount', request.url), 303
+        new URL('/tokens?error=invalid_amount', request.url), 303
       );
     }
 
-    const orderId = `NEXORA-${user.id.slice(0, 8)}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const orderId = `NEXORA-TOKEN-${user.id.slice(0, 8)}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
     const adminDb = createAdminClient();
 
     // payments has RLS enabled without customer INSERT/UPDATE policies.
@@ -55,7 +50,8 @@ export async function POST(request: Request) {
       .from('payments')
       .insert({
         user_id: user.id,
-        plan_id: plan.id,
+        plan_id: null,
+        token_qty: tokenQty,
         amount,
         status: 'pending',
         provider: 'pakasir',
