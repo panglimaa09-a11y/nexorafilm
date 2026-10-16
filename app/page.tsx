@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import Navbar from '@/components/Navbar';
 import MovieRow from '@/components/MovieRow';
 import { createClient } from '@/lib/supabase-server';
@@ -322,7 +322,7 @@ export default async function Home() {
         <footer className="flex flex-col gap-3 border-t border-white/10 pt-7 text-xs text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
           <span>© {new Date().getFullYear()} NEXORA FILM</span>
           <div className="flex flex-wrap gap-5">
-            <Link href="/plans" className="transition hover:text-white">Paket</Link>
+            <Link href="/tokens" className="transition hover:text-white">Token</Link>
             <Link href="/my-list" className="transition hover:text-white">Daftar Saya</Link>
             <Link href="/history" className="transition hover:text-white">Riwayat</Link>
             <Link href="/creators" className="transition hover:text-white">Kreator</Link>
