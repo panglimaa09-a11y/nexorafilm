@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase-admin";
 export const dynamic = "force-dynamic";
 
 type Payment = {
-  id: string; user_id: string; plan_id: string; amount: number | string;
+  id: string; user_id: string; plan_id: string | null; token_qty: number | null; amount: number | string;
   status: string; provider: string | null; provider_order_id: string | null; created_at: string;
 };
 const idr = (amount: number) => new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(amount);
@@ -27,7 +27,7 @@ export default async function AdminAnalyticsPage() {
     { count: shortsCount },
   ] = await Promise.all([
     db.rpc("admin_revenue_analytics"),
-    admin.from("payments").select("id,user_id,plan_id,amount,status,provider,provider_order_id,created_at").order("created_at", { ascending: false }).limit(50),
+    admin.from("payments").select("id,user_id,plan_id,token_qty,amount,status,provider,provider_order_id,created_at").order("created_at", { ascending: false }).limit(50),
     admin.from("profiles").select("id,display_name"),
     admin.from("plans").select("id,name,slug"),
     admin.from("profiles").select("*", { count: "exact", head: true }),
@@ -121,7 +121,7 @@ export default async function AdminAnalyticsPage() {
               <tbody>{paymentRows.map((payment) => <tr key={payment.id} className="border-t border-white/[0.06]">
                 <td className="whitespace-nowrap px-5 py-4 text-slate-400">{new Date(payment.created_at).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" })}</td>
                 <td className="max-w-48 truncate px-5 py-4">{profileMap.get(payment.user_id) || payment.user_id.slice(0, 8)}</td>
-                <td className="px-5 py-4">{planMap.get(payment.plan_id) || "Paket dihapus"}</td><td className="px-5 py-4 text-slate-400">{payment.provider || "—"}</td><td className="whitespace-nowrap px-5 py-4 font-semibold">{idr(Number(payment.amount || 0))}</td>
+                <td className="px-5 py-4">{payment.token_qty ? `${payment.token_qty} token` : (planMap.get(payment.plan_id as string) || "Paket dihapus")}</td><td className="px-5 py-4 text-slate-400">{payment.provider || "—"}</td><td className="whitespace-nowrap px-5 py-4 font-semibold">{idr(Number(payment.amount || 0))}</td>
                 <td className="px-5 py-4"><span className={"rounded-full px-2.5 py-1 text-xs " + (payment.status === "paid" ? "bg-emerald-400/10 text-emerald-300" : payment.status === "pending" ? "bg-amber-400/10 text-amber-300" : "bg-white/10 text-slate-300")}>{payment.status}</span></td>
               </tr>)}</tbody>
             </table>
